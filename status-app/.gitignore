@@ -1,0 +1,13 @@
+# Environment variables
+.env
+*.env
+
+# Database
+uptime.db
+*.db
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

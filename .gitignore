@@ -1,0 +1,43 @@
+# Go
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+/dist/
+
+# Dependencies
+vendor/
+go.sum
+
+# Environment
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Build artifacts
+app
+app.exe
+status
+
+# OS
+Thumbs.db
+.DS_Store

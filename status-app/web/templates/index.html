@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"/>
+  <title>Service Status</title>
+  <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg"/>
+  <meta name="theme-color" content="#0c121c"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <link rel="stylesheet" href="/static/css/main.css"/>
+  <link rel="stylesheet" href="/static/css/blocks.css"/>
+  <!-- Load utils first, without defer -->
+  <script src="/static/js/utils.js"></script>
+  <!-- Then load other scripts with defer -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+  <script src="/static/js/blocks.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>Service Status</h1>
+      <small>Updated <span id="updated">—</span></small>
+    </div>
+    <div class="user">
+      <span id="welcome" class="muted">Public view</span>
+      <button id="loginBtn" class="ghost">Login</button>
+      <button id="logoutBtn" class="ghost hidden">Logout</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="card" id="card-server" data-key="server">
+      <div class="row">
+        <div class="row-left">
+          <img src="/static/images/server.svg" class="icon" alt="Server"/>
+          <div><strong>Server</strong><div class="label">Reachability</div></div>
+        </div>
+        <span class="pill warn">—</span>
+      </div>
+      <div class="row kpirow"><div class="kpi">—</div><div class="label">—</div></div>
+      <div class="row adminRow hidden">
+        <div class="label">Admin</div>
+        <div class="ops">
+          <button class="btn mini checkNow">Check now</button>
+          <label class="toggle">
+            <input type="checkbox" class="monitorToggle" checked>
+            <span class="slider"></span>
+            <span class="toggleLabel">Monitor</span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="card-plex" data-key="plex">
+      <div class="row">
+        <div class="row-left">
+          <img src="/static/images/plex.svg" class="icon" alt="Plex"/>
+          <div><strong>Plex</strong><div class="label">/identity</div></div>
+        </div>
+        <span class="pill warn">—</span>
+      </div>
+      <div class="row kpirow"><div class="kpi">—</div><div class="label">—</div></div>
+      <div class="row adminRow hidden">
+        <div class="label">Admin</div>
+        <div class="ops">
+          <button class="btn mini checkNow">Check now</button>
+          <label class="toggle">
+            <input type="checkbox" class="monitorToggle" checked>
+            <span class="slider"></span>
+            <span class="toggleLabel">Monitor</span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="card-overseerr" data-key="overseerr">
+      <div class="row">
+        <div class="row-left">
+          <img src="/static/images/overseerr.svg" class="icon" alt="Overseerr"/>
+          <div><strong>Overseerr</strong><div class="label">/api/v1/status</div></div>
+        </div>
+        <span class="pill warn">—</span>
+      </div>
+      <div class="row kpirow"><div class="kpi">—</div><div class="label">—</div></div>
+      <div class="row adminRow hidden">
+        <div class="label">Admin</div>
+        <div class="ops">
+          <button class="btn mini checkNow">Check now</button>
+          <label class="toggle">
+            <input type="checkbox" class="monitorToggle" checked>
+            <span class="slider"></span>
+            <span class="toggleLabel">Monitor</span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row"><div><strong>Uptime</strong><div class="label" id="window">Last 24h</div></div></div>
+      <canvas id="uptimeChart"></canvas>
+    </section>
+
+    <section class="card">
+      <div class="row"><div><strong>Recent incidents</strong><div class="label">Last 24h</div></div></div>
+      <ul id="incidents"></ul>
+      <div id="adminOps" class="admin hidden">
+        <div class="sep"></div>
+        <div class="row">
+          <div class="label">Admin</div>
+          <div class="ops">
+            <button id="ingestNow" class="btn">Ingest All Now</button>
+            <button id="resetRecent" class="btn danger">Reset Recent Incidents</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Discreet login modal -->
+  <dialog id="loginModal">
+    <form class="login">
+      <div>
+        <h3>Sign in</h3>
+        <p class="muted">Enter your credentials</p>
+      </div>
+      <div>
+        <label for="u">Username</label>
+        <input id="u" type="text" autocomplete="username" placeholder="admin" required>
+      </div>
+      <div>
+        <label for="p">Password</label>
+        <input id="p" type="password" autocomplete="current-password" placeholder="••••••••" required>
+      </div>
+      <div id="loginError" class="error hidden"></div>
+      <div class="actions">
+        <button id="doLogin" class="btn" type="button">Login</button>
+        <button id="cancelLogin" class="ghost" type="button">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <section id="blocksAdmin" class="card blocks-section admin hidden">
+    <div class="blocks-header">
+      <h2>IP Blocks</h2>
+      <button id="resetBlocks" class="btn danger">Clear All Blocks</button>
+    </div>
+    <div id="blocksList" class="blocks-list">
+      <div class="muted">Loading...</div>
+    </div>
+  </section>
+
+  <footer>Auto-refreshing every 15s. Metrics need a few minutes to populate.</footer>
+</body>
+</html>

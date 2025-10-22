@@ -1,0 +1,21 @@
+# HTTP listen port
+PORT=4555
+
+# SQLite DB path (inside container this will be /data/uptime.db)
+DB_PATH=./uptime.db
+
+# Polling interval in seconds
+POLL_SECONDS=60
+ENABLE_SCHEDULER=true
+
+# --- Service checks ---
+# Your “server reachable” endpoint (via WireGuard or public)
+SERVER_HEALTH_URL=http://your-machine-reachable-end-point
+
+# Overseerr status endpoint (WG or public)
+OVERSEERR_STATUS_URL=https://overseerr.address.com/api/v1/status
+
+
+# Plex (public or LAN) + token
+PLEX_BASE_URL=http://YOUR_PLEX_HOST:32400
+PLEX_TOKEN=YOUR_PLEX_TOKEN

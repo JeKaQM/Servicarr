@@ -1,0 +1,45 @@
+.blocks-section {
+    margin-top: 24px;
+    grid-column: 1/-1;
+}
+.block-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+}
+.block-item:last-child {
+    border-bottom: none;
+}
+.block-info {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+.blocks-list {
+    margin-top: 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.blocks-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.blocks-header h2 {
+    margin: 0;
+    font-size: 20px;
+}
+.empty-state, .error-state {
+    padding: 24px;
+    text-align: center;
+    color: var(--muted);
+}
+.error-state {
+    color: var(--down);
+}
+/* Toast styles moved to styles.css */

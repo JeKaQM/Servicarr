@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32px" height="32px" viewBox="0 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <title>Status Icon</title>
+    <g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <rect fill="#0c121c" x="0" y="0" width="32" height="32" rx="8"/>
+        <path d="M6,16 L10,16 L12,8 L16,24 L19,12 L21,16 L26,16" 
+              stroke="#16a34a" 
+              stroke-width="3" 
+              stroke-linecap="round" 
+              stroke-linejoin="round"/>
+    </g>
+</svg>

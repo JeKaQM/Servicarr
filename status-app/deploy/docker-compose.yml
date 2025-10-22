@@ -1,0 +1,17 @@
+services:
+  status:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: yourname/status:local
+    env_file:
+      - ../.env
+
+    ports:
+      - "4555:4555"
+    volumes:
+      - status_data:/data
+    restart: unless-stopped
+
+volumes:
+  status_data:

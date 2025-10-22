@@ -1,0 +1,31 @@
+FROM golang:1.25-bookworm AS build
+WORKDIR /src
+COPY app/ ./app/
+COPY web/ ./web/
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd app && go mod tidy && go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/status .
+
+FROM debian:bookworm-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata wget && rm -rf /var/lib/apt/lists/*
+COPY --from=build /out/status /usr/local/bin/status
+COPY web/ ./web/
+VOLUME ["/data"]
+ENV TZ=Europe/London \
+    PORT=4555 \
+    DB_PATH=/data/uptime.db \
+    POLL_SECONDS=60 \
+    ENABLE_SCHEDULER=true \
+    INSECURE_DEV=false \
+    SERVER_HEALTH_URL="" \
+    OVERSEERR_STATUS_URL="" \
+    PLEX_BASE_URL="" \
+    PLEX_TOKEN="" \
+    AUTH_USER="admin" \
+    AUTH_PASSWORD="" \
+    AUTH_SECRET=""
+EXPOSE 4555
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD wget -qO- http://127.0.0.1:4555/api/check >/dev/null 2>&1 || exit 1
+ENTRYPOINT ["/usr/local/bin/status"]
