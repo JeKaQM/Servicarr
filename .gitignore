@@ -34,9 +34,8 @@ go.sum
 *.log
 
 # Build artifacts
-app
 app.exe
-status
+status.exe
 
 # OS
 Thumbs.db
