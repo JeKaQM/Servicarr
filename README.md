@@ -3,7 +3,7 @@
   
 # Servicarr
 
-Example: https://status.jenodoescode.com
+**Live Demo**: [https://status.jenodoescode.com](https://status.jenodoescode.com)
 </div>
 
 A lightweight status page application that monitors multiple services and displays their uptime status. Built with Go backend and vanilla JavaScript frontend, containerized with Docker for easy deployment.
