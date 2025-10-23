@@ -189,19 +189,31 @@ func listBlockedIPs() ([]map[string]interface{}, error) {
 	}
 	defer rows.Close()
 
-	var results []map[string]interface{}
+	results := make([]map[string]interface{}, 0)
 	for rows.Next() {
-		var ip, blockedAt, expiresAt, reason string
+		var ip, expiresAt string
+		var blockedAt, reason sql.NullString
 		var attempts int
 		if err := rows.Scan(&ip, &blockedAt, &attempts, &expiresAt, &reason); err != nil {
 			continue
 		}
+		
+		blockedAtStr := blockedAt.String
+		if !blockedAt.Valid {
+			blockedAtStr = expiresAt // fallback to expires_at if blocked_at is NULL
+		}
+		
+		reasonStr := reason.String
+		if !reason.Valid {
+			reasonStr = "Too many failed login attempts"
+		}
+		
 		results = append(results, map[string]interface{}{
 			"ip": ip,
-			"blocked_at": blockedAt,
+			"blocked_at": blockedAtStr,
 			"attempts": attempts,
 			"expires_at": expiresAt,
-			"reason": reason,
+			"reason": reasonStr,
 		})
 	}
 	return results, nil
