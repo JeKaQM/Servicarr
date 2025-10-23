@@ -2,7 +2,11 @@ const REFRESH_MS = 15000, HOURS = 24;
 const $ = (s,r=document) => r.querySelector(s);
 const $$ = (s,r=document) => Array.from(r.querySelectorAll(s));
 const fmtMs = ms => ms==null ? '—' : ms+' ms';
-const cls = (ok,status) => ok ? 'pill ok' : (status ? 'pill down' : 'pill warn');
+const cls = (ok, status, degraded) => {
+  if (!ok) return 'pill down'; // Down = red
+  if (degraded) return 'pill warn'; // Degraded = amber
+  return 'pill ok'; // Up = green
+};
 
 async function j(u,opts) {
   const controller = new AbortController();
@@ -65,8 +69,12 @@ function updCard(id,data) {
     return;
   }
 
-  pill.textContent = data.ok ? 'UP' : 'DOWN';
-  pill.className = cls(data.ok, data.status);
+  if (data.degraded) {
+    pill.textContent = 'DEGRADED';
+  } else {
+    pill.textContent = data.ok ? 'UP' : 'DOWN';
+  }
+  pill.className = cls(data.ok, data.status, data.degraded);
   k.textContent = fmtMs(data.ms);
   h.textContent = data.status ? ('HTTP '+data.status) : 'no response';
 }
@@ -239,15 +247,16 @@ async function whoami() {
       $('#loginBtn').classList.add('hidden');
       $('#logoutBtn').classList.remove('hidden');
       $('#adminOps').classList.remove('hidden');
-      $('#blocksAdmin').classList.remove('hidden');
+      $('#adminPanel').classList.remove('hidden');
       $$('.adminRow').forEach(e => e.classList.remove('hidden'));
       document.dispatchEvent(loginStateChanged);
+      loadAlertsConfig();
     } else {
       $('#welcome').textContent = 'Public view';
       $('#loginBtn').classList.remove('hidden');
       $('#logoutBtn').classList.add('hidden');
       $('#adminOps').classList.add('hidden');
-      $('#blocksAdmin').classList.add('hidden');
+      $('#adminPanel').classList.add('hidden');
       $$('.adminRow').forEach(e => e.classList.add('hidden'));
       
       // Reset login form
@@ -316,6 +325,85 @@ async function resetRecent() {
     },
     'Recent incidents reset successfully'
   );
+}
+
+async function saveAlertsConfig() {
+  const statusEl = $('#alertStatus');
+  const btn = $('#saveAlerts');
+  
+  const config = {
+    enabled: $('#alertsEnabled').checked,
+    smtp_host: $('#smtpHost').value,
+    smtp_port: parseInt($('#smtpPort').value) || 587,
+    smtp_user: $('#smtpUser').value,
+    smtp_password: $('#smtpPassword').value,
+    alert_email: $('#alertEmail').value,
+    from_email: $('#alertFromEmail').value,
+    alert_on_down: $('#alertOnDown').checked,
+    alert_on_degraded: $('#alertOnDegraded').checked,
+    alert_on_up: $('#alertOnUp').checked
+  };
+  
+  await handleButtonAction(
+    btn,
+    async () => {
+      await j('/api/admin/alerts/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrf()
+        },
+        body: JSON.stringify(config)
+      });
+      
+      statusEl.textContent = 'Configuration saved successfully';
+      statusEl.className = 'status-message success';
+      statusEl.classList.remove('hidden');
+      setTimeout(() => statusEl.classList.add('hidden'), 3000);
+    },
+    'Configuration saved'
+  );
+}
+
+async function sendTestEmail() {
+  const statusEl = $('#alertStatus');
+  const btn = $('#testEmail');
+  
+  await handleButtonAction(
+    btn,
+    async () => {
+      const result = await j('/api/admin/alerts/test', {
+        method: 'POST',
+        headers: {'X-CSRF-Token': getCsrf()}
+      });
+      
+      statusEl.textContent = result.message || 'Test email sent successfully';
+      statusEl.className = 'status-message success';
+      statusEl.classList.remove('hidden');
+      setTimeout(() => statusEl.classList.add('hidden'), 5000);
+    },
+    'Test email sent'
+  );
+}
+
+async function loadAlertsConfig() {
+  try {
+    const config = await j('/api/admin/alerts/config');
+    if (config) {
+      $('#alertsEnabled').checked = config.enabled || false;
+      $('#smtpHost').value = config.smtp_host || '';
+      $('#smtpPort').value = config.smtp_port || 587;
+      $('#smtpUser').value = config.smtp_user || '';
+      $('#smtpPassword').value = config.smtp_password || '';
+      $('#alertEmail').value = config.alert_email || '';
+      $('#alertFromEmail').value = config.from_email || '';
+      $('#alertOnDown').checked = config.alert_on_down !== false;
+      $('#alertOnDegraded').checked = config.alert_on_degraded !== false;
+      $('#alertOnUp').checked = config.alert_on_up || false;
+    }
+  } catch (err) {
+    console.log('No alerts config found or error loading:', err);
+  }
 }
 
 async function checkNowFor(card) {
@@ -409,6 +497,47 @@ window.addEventListener('load', () => {
   const resetBtn = $('#resetRecent');
   if (resetBtn) {
     resetBtn.addEventListener('click', resetRecent);
+  }
+  
+  // Tab functionality in admin panel
+  const ingestBtnTab = $('#ingestNowTab');
+  if (ingestBtnTab) {
+    ingestBtnTab.addEventListener('click', ingestAll);
+  }
+  
+  const resetBtnTab = $('#resetRecentTab');
+  if (resetBtnTab) {
+    resetBtnTab.addEventListener('click', resetRecent);
+  }
+  
+  // Tab switching
+  const tabBtns = $$('.tab-btn');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabName = btn.getAttribute('data-tab');
+      
+      // Update active tab button
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      // Update active tab content
+      $$('.tab-content').forEach(content => content.classList.remove('active'));
+      const activeContent = $(`#tab-${tabName}`);
+      if (activeContent) {
+        activeContent.classList.add('active');
+      }
+    });
+  });
+  
+  // Alerts form handlers
+  const saveAlertsBtn = $('#saveAlerts');
+  if (saveAlertsBtn) {
+    saveAlertsBtn.addEventListener('click', saveAlertsConfig);
+  }
+  
+  const testEmailBtn = $('#testEmail');
+  if (testEmailBtn) {
+    testEmailBtn.addEventListener('click', sendTestEmail);
   }
   
   $$('.checkNow').forEach(btn => 

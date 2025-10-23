@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/smtp"
 	"net/url"
 	"os"
 	"strconv"
@@ -42,20 +43,42 @@ type LiveResult struct {
 	Status   int    `json:"status"`
 	MS       *int   `json:"ms,omitempty"`
 	Disabled bool   `json:"disabled"`
+	Degraded bool   `json:"degraded"`
 }
 type LivePayload struct {
 	T      time.Time             `json:"t"`
 	Status map[string]LiveResult `json:"status"`
 }
 
+type AlertConfig struct {
+	Enabled        bool   `json:"enabled"`
+	SMTPHost       string `json:"smtp_host"`
+	SMTPPort       int    `json:"smtp_port"`
+	SMTPUser       string `json:"smtp_user"`
+	SMTPPassword   string `json:"smtp_password"`
+	AlertEmail     string `json:"alert_email"`
+	FromEmail      string `json:"from_email"`
+	AlertOnDown    bool   `json:"alert_on_down"`
+	AlertOnDegraded bool  `json:"alert_on_degraded"`
+	AlertOnUp      bool   `json:"alert_on_up"`
+}
+
+type ServiceStatus struct {
+	Key      string
+	OK       bool
+	Degraded bool
+}
+
 var (
-	db             *sql.DB
-	services       []Service
-	authUser       string
-	authHash       []byte
-	hmacSecret     []byte
-	insecureDev    bool
-	sessionMaxAgeS int
+	db              *sql.DB
+	services        []Service
+	authUser        string
+	authHash        []byte
+	hmacSecret      []byte
+	insecureDev     bool
+	sessionMaxAgeS  int
+	alertConfig     *AlertConfig
+	lastServiceStatus map[string]ServiceStatus
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -224,6 +247,111 @@ func listBlockedIPs() ([]map[string]interface{}, error) {
 		})
 	}
 	return results, nil
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Alerts & Email
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+func loadAlertConfig() {
+	var config AlertConfig
+	err := db.QueryRow(`SELECT enabled, smtp_host, smtp_port, smtp_user, smtp_password, alert_email, from_email, alert_on_down, alert_on_degraded, alert_on_up 
+		FROM alert_config WHERE id = 1`).Scan(
+		&config.Enabled, &config.SMTPHost, &config.SMTPPort, &config.SMTPUser,
+		&config.SMTPPassword, &config.AlertEmail, &config.FromEmail,
+		&config.AlertOnDown, &config.AlertOnDegraded, &config.AlertOnUp)
+	
+	if err == nil {
+		alertConfig = &config
+	}
+}
+
+func sendAlertEmail(subject, body string) error {
+	if alertConfig == nil || !alertConfig.Enabled {
+		return nil
+	}
+	
+	if alertConfig.SMTPHost == "" || alertConfig.AlertEmail == "" {
+		return errors.New("SMTP configuration incomplete")
+	}
+	
+	from := alertConfig.FromEmail
+	if from == "" {
+		from = alertConfig.SMTPUser
+	}
+	
+	msg := []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s",
+		from, alertConfig.AlertEmail, subject, body))
+	
+	auth := smtp.PlainAuth("", alertConfig.SMTPUser, alertConfig.SMTPPassword, alertConfig.SMTPHost)
+	addr := fmt.Sprintf("%s:%d", alertConfig.SMTPHost, alertConfig.SMTPPort)
+	
+	return smtp.SendMail(addr, auth, from, []string{alertConfig.AlertEmail}, msg)
+}
+
+func checkAndSendAlerts(serviceKey string, ok, degraded bool) {
+	if alertConfig == nil || !alertConfig.Enabled {
+		return
+	}
+	
+	// Get previous status
+	var prevOK, prevDegraded int
+	err := db.QueryRow(`SELECT ok, degraded FROM service_status_history WHERE service_key = ?`, serviceKey).Scan(&prevOK, &prevDegraded)
+	
+	if err == sql.ErrNoRows {
+		// First time - just save current status
+		_, _ = db.Exec(`INSERT INTO service_status_history (service_key, ok, degraded, updated_at) VALUES (?, ?, ?, datetime('now'))`,
+			serviceKey, boolToInt(ok), boolToInt(degraded))
+		return
+	}
+	
+	prevOKBool := prevOK == 1
+	prevDegradedBool := prevDegraded == 1
+	
+	// Check for status changes
+	if !ok && prevOKBool && alertConfig.AlertOnDown {
+		// Service went down
+		service := findServiceByKey(serviceKey)
+		serviceName := serviceKey
+		if service != nil {
+			serviceName = service.Label
+		}
+		subject := fmt.Sprintf("🔴 Service Down: %s", serviceName)
+		body := fmt.Sprintf("Service %s is now DOWN.\n\nTime: %s", serviceName, time.Now().Format(time.RFC1123))
+		go sendAlertEmail(subject, body)
+	} else if ok && !prevOKBool && alertConfig.AlertOnUp {
+		// Service came back up
+		service := findServiceByKey(serviceKey)
+		serviceName := serviceKey
+		if service != nil {
+			serviceName = service.Label
+		}
+		subject := fmt.Sprintf("✅ Service Recovered: %s", serviceName)
+		body := fmt.Sprintf("Service %s is now UP.\n\nTime: %s", serviceName, time.Now().Format(time.RFC1123))
+		go sendAlertEmail(subject, body)
+	} else if ok && degraded && !prevDegradedBool && alertConfig.AlertOnDegraded {
+		// Service became degraded
+		service := findServiceByKey(serviceKey)
+		serviceName := serviceKey
+		if service != nil {
+			serviceName = service.Label
+		}
+		subject := fmt.Sprintf("⚠️ Service Degraded: %s", serviceName)
+		body := fmt.Sprintf("Service %s is experiencing high latency (>200ms).\n\nTime: %s", serviceName, time.Now().Format(time.RFC1123))
+		go sendAlertEmail(subject, body)
+	}
+	
+	// Update status history
+	_, _ = db.Exec(`INSERT INTO service_status_history (service_key, ok, degraded, updated_at) VALUES (?, ?, ?, datetime('now'))
+		ON CONFLICT(service_key) DO UPDATE SET ok=?, degraded=?, updated_at=datetime('now')`,
+		serviceKey, boolToInt(ok), boolToInt(degraded), boolToInt(ok), boolToInt(degraded))
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func serveBlockedPage(w http.ResponseWriter, r *http.Request, block *BlockInfo) {
@@ -480,6 +608,28 @@ CREATE TABLE IF NOT EXISTS service_state (
   disabled INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS alert_config (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  enabled INTEGER NOT NULL DEFAULT 0,
+  smtp_host TEXT,
+  smtp_port INTEGER DEFAULT 587,
+  smtp_user TEXT,
+  smtp_password TEXT,
+  alert_email TEXT,
+  from_email TEXT,
+  alert_on_down INTEGER NOT NULL DEFAULT 1,
+  alert_on_degraded INTEGER NOT NULL DEFAULT 1,
+  alert_on_up INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS service_status_history (
+  service_key TEXT PRIMARY KEY,
+  ok INTEGER NOT NULL,
+  degraded INTEGER NOT NULL,
+  updated_at TEXT
+);
 `)
 	return err
 }
@@ -560,11 +710,12 @@ func handleCheck(w http.ResponseWriter, r *http.Request) {
 	for _, s := range services {
 		if s.Disabled {
 			// Include disabled services in response
-			out.Status[s.Key] = LiveResult{Label: s.Label, OK: false, Status: 0, MS: nil, Disabled: true}
+			out.Status[s.Key] = LiveResult{Label: s.Label, OK: false, Status: 0, MS: nil, Disabled: true, Degraded: false}
 			continue
 		}
 		ok, code, ms, _ := httpCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
-		out.Status[s.Key] = LiveResult{Label: s.Label, OK: ok, Status: code, MS: ms, Disabled: false}
+		degraded := ok && ms != nil && *ms > 200
+		out.Status[s.Key] = LiveResult{Label: s.Label, OK: ok, Status: code, MS: ms, Disabled: false, Degraded: degraded}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
@@ -692,15 +843,16 @@ func handleAdminCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.Disabled {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(LiveResult{Label: s.Label, OK: false, Status: 0})
+		_ = json.NewEncoder(w).Encode(LiveResult{Label: s.Label, OK: false, Status: 0, Degraded: false})
 		return
 	}
 	now := time.Now().UTC()
 	ok, code, ms, _ := httpCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
 	insertSample(now, s.Key, ok, code, ms)
 
+	degraded := ok && ms != nil && *ms > 200
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(LiveResult{Label: s.Label, OK: ok, Status: code, MS: ms})
+	_ = json.NewEncoder(w).Encode(LiveResult{Label: s.Label, OK: ok, Status: code, MS: ms, Degraded: degraded})
 }
 
 func handleToggleMonitoring(w http.ResponseWriter, r *http.Request) {
@@ -825,6 +977,90 @@ func handleUnblockIP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"unblocked": req.IP,
+	})
+}
+
+func handleGetAlertsConfig(w http.ResponseWriter, r *http.Request) {
+	var config AlertConfig
+	err := db.QueryRow(`SELECT enabled, smtp_host, smtp_port, smtp_user, smtp_password, alert_email, from_email, alert_on_down, alert_on_degraded, alert_on_up 
+		FROM alert_config WHERE id = 1`).Scan(
+		&config.Enabled, &config.SMTPHost, &config.SMTPPort, &config.SMTPUser, 
+		&config.SMTPPassword, &config.AlertEmail, &config.FromEmail,
+		&config.AlertOnDown, &config.AlertOnDegraded, &config.AlertOnUp)
+	
+	if err == sql.ErrNoRows {
+		// Return default config
+		config = AlertConfig{
+			Enabled:         false,
+			SMTPPort:        587,
+			AlertOnDown:     true,
+			AlertOnDegraded: true,
+			AlertOnUp:       false,
+		}
+	} else if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(config)
+}
+
+func handleSaveAlertsConfig(w http.ResponseWriter, r *http.Request) {
+	var config AlertConfig
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	
+	_, err := db.Exec(`INSERT INTO alert_config (id, enabled, smtp_host, smtp_port, smtp_user, smtp_password, alert_email, from_email, alert_on_down, alert_on_degraded, alert_on_up, updated_at)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+		ON CONFLICT(id) DO UPDATE SET 
+			enabled=?, smtp_host=?, smtp_port=?, smtp_user=?, smtp_password=?, alert_email=?, from_email=?,
+			alert_on_down=?, alert_on_degraded=?, alert_on_up=?, updated_at=datetime('now')`,
+		config.Enabled, config.SMTPHost, config.SMTPPort, config.SMTPUser, config.SMTPPassword, 
+		config.AlertEmail, config.FromEmail, config.AlertOnDown, config.AlertOnDegraded, config.AlertOnUp,
+		config.Enabled, config.SMTPHost, config.SMTPPort, config.SMTPUser, config.SMTPPassword,
+		config.AlertEmail, config.FromEmail, config.AlertOnDown, config.AlertOnDegraded, config.AlertOnUp)
+	
+	if err != nil {
+		log.Printf("Error saving alert config: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	
+	// Update in-memory config
+	alertConfig = &config
+	
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Configuration saved successfully",
+	})
+}
+
+func handleTestEmail(w http.ResponseWriter, r *http.Request) {
+	if alertConfig == nil || !alertConfig.Enabled {
+		http.Error(w, "alerts not configured or disabled", http.StatusBadRequest)
+		return
+	}
+	
+	err := sendAlertEmail("Test Alert", "This is a test email from your Service Status monitor.\n\nIf you received this, your email configuration is working correctly!")
+	if err != nil {
+		log.Printf("Error sending test email: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("Failed to send test email: %v", err),
+		})
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Test email sent successfully to " + alertConfig.AlertEmail,
 	})
 }
 
@@ -958,6 +1194,12 @@ func main() {
 	
 	// Load service disabled states from database
 	loadServiceStates()
+	
+	// Load alert configuration
+	loadAlertConfig()
+	
+	// Initialize last service status map
+	lastServiceStatus = make(map[string]ServiceStatus)
 
 	// Scheduler
 	if enableScheduler {
@@ -973,7 +1215,9 @@ func main() {
 						continue
 					}
 					ok, code, ms, _ := httpCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
+					degraded := ok && ms != nil && *ms > 200
 					insertSample(now, s.Key, ok, code, ms)
+					checkAndSendAlerts(s.Key, ok, degraded)
 				}
 				<-t.C
 			}
@@ -993,6 +1237,16 @@ func main() {
 	authAPI.HandleFunc("/api/admin/blocks", requireAuth(handleListBlocks))
 	authAPI.HandleFunc("/api/admin/unblock", requireAuth(handleUnblockIP))
 	authAPI.HandleFunc("/api/admin/clear-blocks", requireAuth(clearIPBlocks))
+	authAPI.HandleFunc("/api/admin/alerts/config", requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetAlertsConfig(w, r)
+		} else if r.Method == http.MethodPost {
+			handleSaveAlertsConfig(w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+	authAPI.HandleFunc("/api/admin/alerts/test", requireAuth(handleTestEmail))
 	authAPI.HandleFunc("/api/me", handleWhoAmI)
 	authAPI.HandleFunc("/api/login", handleLogin)
 	authAPI.HandleFunc("/api/logout", handleLogout)
