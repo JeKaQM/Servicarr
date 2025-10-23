@@ -135,7 +135,7 @@ func getIPBlock(ip string) (*BlockInfo, error) {
 	var block BlockInfo
 	err := db.QueryRow(`SELECT ip_address, attempts, expires_at 
 		FROM ip_blocks 
-		WHERE ip_address = ? AND expires_at > datetime('now')`, ip).Scan(&block.IP, &block.Attempts, &block.ExpiresAt)
+		WHERE ip_address = ? AND blocked_at IS NOT NULL AND expires_at > datetime('now')`, ip).Scan(&block.IP, &block.Attempts, &block.ExpiresAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -149,24 +149,31 @@ func isIPBlocked(ip string) bool {
 	var blockedAt sql.NullString
 	err := db.QueryRow(`SELECT blocked_at FROM ip_blocks 
 		WHERE ip_address = ? AND expires_at > datetime('now')`, ip).Scan(&blockedAt)
+	
 	return err == nil && blockedAt.Valid // Only blocked if blocked_at is set
 }
 
 func logFailedLoginAttempt(ip string) {
-	// Check if there's an existing record
+	// First, delete any expired blocks for this IP
+	db.Exec(`DELETE FROM ip_blocks WHERE ip_address = ? AND expires_at <= datetime('now')`, ip)
+	
+	// Check if there's an existing non-expired record
 	var attempts int
-	err := db.QueryRow(`SELECT attempts FROM ip_blocks 
-		WHERE ip_address = ? AND expires_at > datetime('now')`, ip).Scan(&attempts)
+	var blockedAt sql.NullString
+	err := db.QueryRow(`SELECT attempts, blocked_at FROM ip_blocks 
+		WHERE ip_address = ?`, ip).Scan(&attempts, &blockedAt)
 	
 	if err == nil {
-		// Update existing record, block only when attempts reach 3
+		newAttempts := attempts + 1
+		// Update existing record, block after 3 attempts
 		_, _ = db.Exec(`UPDATE ip_blocks 
-			SET attempts = attempts + 1,
-				blocked_at = CASE WHEN attempts + 1 >= 3 THEN datetime('now') ELSE NULL END,
-				expires_at = datetime('now', '+24 hours')
-			WHERE ip_address = ? AND expires_at > datetime('now')`, ip)
+			SET attempts = ?,
+				blocked_at = CASE WHEN ? > 3 THEN datetime('now') ELSE NULL END,
+				expires_at = datetime('now', '+24 hours'),
+				reason = 'Failed login attempts'
+			WHERE ip_address = ?`, newAttempts, newAttempts, ip)
 	} else {
-		// Create new tracking record (not blocked until 3 attempts)
+		// Create completely new record
 		_, _ = db.Exec(`INSERT INTO ip_blocks (ip_address, blocked_at, attempts, expires_at, reason)
 			VALUES (?, NULL, 1, datetime('now', '+24 hours'), 'Failed login attempts')`,
 			ip)
@@ -274,6 +281,36 @@ func rateLimit(next http.Handler) http.Handler {
 			return
 		}
 		e.tokens--
+		next.ServeHTTP(w, r)
+	})
+}
+
+// IP blocking check only (no rate limiting)
+func checkIPBlock(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+		
+		// Check if IP is blocked
+		if block, err := getIPBlock(ip); block != nil {
+			// For API requests, return JSON
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"error": "access_blocked",
+					"message": "Your access has been temporarily blocked due to excessive failed login attempts",
+					"expires_at": block.ExpiresAt,
+				})
+				return
+			}
+			
+			// For web requests, show blocked page
+			serveBlockedPage(w, r, block)
+			return
+		} else if err != nil {
+			log.Printf("error checking IP block: %v", err)
+		}
+		
 		next.ServeHTTP(w, r)
 	})
 }
@@ -971,7 +1008,8 @@ func main() {
 		w.Header().Set("Content-Type", "image/x-icon")
 		http.ServeFile(w, r, "web/static/images/favicon.ico")
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { serveIndex(w, r) })
+	// Main page: check IP blocking but no rate limiting
+	mux.Handle("/", checkIPBlock(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { serveIndex(w, r) })))
 
 	// Server with timeouts + security headers
 	handler := secureHeaders(mux)
