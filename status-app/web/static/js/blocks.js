@@ -1,10 +1,12 @@
 // IP Blocks management
 function setupBlocksAdmin() {
-    const blocksAdmin = document.getElementById('blocksAdmin');
-    if (!blocksAdmin) return;
+    const adminPanel = document.getElementById('adminPanel');
+    if (!adminPanel) return;
 
     async function loadBlocks() {
         const blocksList = document.getElementById('blocksList');
+        if (!blocksList) return; // Tab not visible yet
+        
         try {
             blocksList.innerHTML = '<div class="muted">Loading...</div>';
             

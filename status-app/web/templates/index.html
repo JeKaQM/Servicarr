@@ -105,16 +105,6 @@
     <section class="card">
       <div class="row"><div><strong>Recent incidents</strong><div class="label">Last 24h</div></div></div>
       <ul id="incidents"></ul>
-      <div id="adminOps" class="admin hidden">
-        <div class="sep"></div>
-        <div class="row">
-          <div class="label">Admin</div>
-          <div class="ops">
-            <button id="ingestNow" class="btn">Ingest All Now</button>
-            <button id="resetRecent" class="btn danger">Reset Recent Incidents</button>
-          </div>
-        </div>
-      </div>
     </section>
   </main>
 
@@ -141,13 +131,103 @@
     </form>
   </dialog>
 
-  <section id="blocksAdmin" class="card blocks-section admin hidden">
-    <div class="blocks-header">
-      <h2>IP Blocks</h2>
-      <button id="resetBlocks" class="btn danger">Clear All Blocks</button>
+  <!-- Admin Panel with Tabs -->
+  <section id="adminPanel" class="card admin-panel admin hidden">
+    <div class="admin-tabs">
+      <button class="tab-btn active" data-tab="main">Main</button>
+      <button class="tab-btn" data-tab="security">Security</button>
+      <button class="tab-btn" data-tab="alerts">Alerts</button>
     </div>
-    <div id="blocksList" class="blocks-list">
-      <div class="muted">Loading...</div>
+
+    <!-- Main Tab -->
+    <div id="tab-main" class="tab-content active">
+      <h2>Admin Controls</h2>
+      <div class="admin-section">
+        <h3>Service Management</h3>
+        <p class="muted">Quick actions for all services</p>
+        <div class="ops">
+          <button id="ingestNowTab" class="btn">Check All Services Now</button>
+          <button id="resetRecentTab" class="btn danger">Reset Recent Incidents</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security Tab -->
+    <div id="tab-security" class="tab-content">
+      <div class="blocks-header">
+        <h2>IP Block Management</h2>
+        <button id="resetBlocks" class="btn danger">Clear All Blocks</button>
+      </div>
+      <div id="blocksList" class="blocks-list">
+        <div class="muted">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Alerts Tab -->
+    <div id="tab-alerts" class="tab-content">
+      <h2>Email Alerts Configuration</h2>
+      <p class="muted">Send email notifications when service status changes</p>
+      
+      <div class="admin-section">
+        <h3>SMTP Settings</h3>
+        <form id="alertsForm">
+          <div class="form-group">
+            <label for="alertsEnabled">
+              <input type="checkbox" id="alertsEnabled"> Enable email alerts
+            </label>
+          </div>
+          
+          <div class="form-group">
+            <label for="smtpHost">SMTP Host</label>
+            <input type="text" id="smtpHost" placeholder="smtp.gmail.com" />
+          </div>
+          
+          <div class="form-group">
+            <label for="smtpPort">SMTP Port</label>
+            <input type="number" id="smtpPort" placeholder="587" />
+          </div>
+          
+          <div class="form-group">
+            <label for="smtpUser">SMTP Username</label>
+            <input type="text" id="smtpUser" placeholder="your-email@example.com" />
+          </div>
+          
+          <div class="form-group">
+            <label for="smtpPassword">SMTP Password</label>
+            <input type="password" id="smtpPassword" placeholder="••••••••" />
+          </div>
+          
+          <div class="form-group">
+            <label for="alertEmail">Alert Email (To)</label>
+            <input type="email" id="alertEmail" placeholder="admin@example.com" />
+          </div>
+          
+          <div class="form-group">
+            <label for="alertFromEmail">From Email</label>
+            <input type="email" id="alertFromEmail" placeholder="alerts@example.com" />
+          </div>
+          
+          <div class="form-group">
+            <h4>Alert Conditions</h4>
+            <label>
+              <input type="checkbox" id="alertOnDown" checked> Alert when service goes DOWN
+            </label>
+            <label>
+              <input type="checkbox" id="alertOnDegraded" checked> Alert when service becomes DEGRADED
+            </label>
+            <label>
+              <input type="checkbox" id="alertOnUp"> Alert when service comes back UP
+            </label>
+          </div>
+          
+          <div class="ops">
+            <button type="button" id="saveAlerts" class="btn">Save Configuration</button>
+            <button type="button" id="testEmail" class="btn ghost">Send Test Email</button>
+          </div>
+          
+          <div id="alertStatus" class="status-message hidden"></div>
+        </form>
+      </div>
     </div>
   </section>
 
