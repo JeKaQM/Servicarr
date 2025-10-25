@@ -246,7 +246,6 @@ async function whoami() {
       $('#welcome').textContent = 'Welcome, ' + me.user;
       $('#loginBtn').classList.add('hidden');
       $('#logoutBtn').classList.remove('hidden');
-      $('#adminOps').classList.remove('hidden');
       $('#adminPanel').classList.remove('hidden');
       $$('.adminRow').forEach(e => e.classList.remove('hidden'));
       document.dispatchEvent(loginStateChanged);
@@ -255,7 +254,6 @@ async function whoami() {
       $('#welcome').textContent = 'Public view';
       $('#loginBtn').classList.remove('hidden');
       $('#logoutBtn').classList.add('hidden');
-      $('#adminOps').classList.add('hidden');
       $('#adminPanel').classList.add('hidden');
       $$('.adminRow').forEach(e => e.classList.add('hidden'));
       
@@ -297,7 +295,7 @@ async function handleButtonAction(btn, action, successMsg) {
 }
 
 async function ingestAll() {
-  const btn = $('#ingestNow');
+  const btn = $('#ingestNowTab') || $('#ingestNow');
   await handleButtonAction(
     btn,
     async () => {
@@ -313,7 +311,7 @@ async function ingestAll() {
 
 async function resetRecent() {
   if(!confirm('Reset incidents recorded in last 24h?')) return;
-  const btn = $('#resetRecent');
+  const btn = $('#resetRecentTab') || $('#resetRecent');
   await handleButtonAction(
     btn,
     async () => {
@@ -525,6 +523,12 @@ window.addEventListener('load', () => {
       const activeContent = $(`#tab-${tabName}`);
       if (activeContent) {
         activeContent.classList.add('active');
+      }
+      
+      // Load blocks when security tab is clicked
+      if (tabName === 'security') {
+        const event = new Event('loginStateChanged');
+        document.dispatchEvent(event);
       }
     });
   });
