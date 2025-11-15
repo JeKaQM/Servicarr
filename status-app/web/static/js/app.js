@@ -53,8 +53,20 @@ async function j(u,opts) {
 
 function updCard(id,data) {
   const el = document.getElementById(id);
-  const pill = $('.pill',el), k = $('.kpi',el), h = $('.label',el);
+  if (!el) {
+    console.error('Card element not found:', id);
+    return;
+  }
+  
+  const pill = $('.pill',el);
+  const k = $('.kpi',el);
+  const h = $('.kpirow .label',el); // More specific selector for status label
   const toggle = $('.monitorToggle', el);
+  
+  if (!pill || !k || !h) {
+    console.error('Required elements not found in card:', id);
+    return;
+  }
   
   // Set checkbox state based on disabled flag from server
   if (toggle) {
