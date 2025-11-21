@@ -98,15 +98,67 @@
     </section>
 
     <section class="card">
-      <div class="row"><div><strong>Uptime</strong><div class="label" id="window">Last 24h</div></div></div>
-      <canvas id="uptimeChart"></canvas>
-    </section>
-
-    <section class="card">
       <div class="row"><div><strong>Recent incidents</strong><div class="label">Last 24h</div></div></div>
       <ul id="incidents"></ul>
     </section>
   </main>
+
+  <!-- Full-width Uptime Section -->
+  <section class="card uptime-section">
+    <div class="row">
+      <div>
+        <strong>Uptime</strong>
+        <div class="label" id="window">Last 30 days</div>
+      </div>
+      <select id="uptimeFilter" class="uptime-filter">
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="180">Last 180 days</option>
+        <option value="360">Last 360 days</option>
+      </select>
+    </div>
+    
+    <!-- Server Uptime Bar -->
+    <div class="service-uptime">
+      <div class="service-uptime-header">
+        <span class="service-name">Server</span>
+        <span class="protocol-badge">TCP</span>
+        <span class="uptime-percent" id="uptime-server">—%</span>
+      </div>
+      <div class="uptime-bar-container">
+        <div class="uptime-bar" id="uptime-bar-server"></div>
+      </div>
+    </div>
+
+    <!-- Plex Uptime Bar -->
+    <div class="service-uptime">
+      <div class="service-uptime-header">
+        <span class="service-name">Plex</span>
+        <span class="protocol-badge">HTTPS</span>
+        <span class="uptime-percent" id="uptime-plex">—%</span>
+      </div>
+      <div class="uptime-bar-container">
+        <div class="uptime-bar" id="uptime-bar-plex"></div>
+      </div>
+    </div>
+
+    <!-- Overseerr Uptime Bar -->
+    <div class="service-uptime">
+      <div class="service-uptime-header">
+        <span class="service-name">Overseerr</span>
+        <span class="protocol-badge">HTTPS</span>
+        <span class="uptime-percent" id="uptime-overseerr">—%</span>
+      </div>
+      <div class="uptime-bar-container">
+        <div class="uptime-bar" id="uptime-bar-overseerr"></div>
+      </div>
+    </div>
+    
+    <div class="uptime-footer">
+      <span class="uptime-timestamp" id="timestamp-global">—</span>
+    </div>
+  </section>
 
   <!-- Discreet login modal -->
   <dialog id="loginModal">

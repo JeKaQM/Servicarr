@@ -1,4 +1,5 @@
-const REFRESH_MS = 15000, HOURS = 24;
+const REFRESH_MS = 15000;
+let DAYS = 30;
 const $ = (s,r=document) => r.querySelector(s);
 const $$ = (s,r=document) => Array.from(r.querySelectorAll(s));
 const fmtMs = ms => ms==null ? '—' : ms+' ms';
@@ -148,6 +149,99 @@ function renderIncidents(items) {
   }).join('');
 }
 
+function renderUptimeBars(metrics, days) {
+  const daysToShow = days || DAYS;
+  const services = ['server', 'plex', 'overseerr'];
+  const now = new Date();
+  const daysAgo = now.getTime() - (daysToShow * 24 * 60 * 60 * 1000);
+  
+  // Update global timestamp once
+  const globalTimestamp = $('#timestamp-global');
+  if (globalTimestamp) {
+    const startDate = new Date(daysAgo);
+    globalTimestamp.textContent = `Tracking since ${startDate.toLocaleDateString()}`;
+  }
+  
+  services.forEach(key => {
+    const bar = $(`#uptime-bar-${key}`);
+    const uptimePercent = $(`#uptime-${key}`);
+    
+    if (!bar) return;
+    
+    const data = (metrics && metrics.series) ? metrics.series[key] || [] : [];
+    const overall = (metrics && metrics.overall) ? metrics.overall[key] || 0 : 0;
+    
+    // Update uptime percentage
+    if (uptimePercent) {
+      if (data.length === 0) {
+        uptimePercent.textContent = 'N/A';
+        uptimePercent.style.color = 'var(--text-dim)';
+      } else {
+        uptimePercent.textContent = `${overall.toFixed(1)}%`;
+        uptimePercent.style.color = overall >= 99 ? 'var(--ok)' : overall >= 95 ? 'var(--warn)' : 'var(--down)';
+      }
+    }
+    
+    // Clear existing blocks
+    bar.innerHTML = '';
+    
+    // Create blocks for each day - always show DAYS blocks
+    // If we have data, use it; otherwise show gray "no data" blocks
+    const blocks = [];
+    
+    if (data.length > 0) {
+      // Fill in missing days with null data
+      const dataMap = {};
+      data.forEach(point => {
+        if (point.day) {
+          dataMap[point.day] = point;
+        }
+      });
+      
+      // Create all days
+      for (let i = daysToShow - 1; i >= 0; i--) {
+        const dayTime = new Date(now.getTime() - (i * 24 * 60 * 60 * 1000));
+        const dayBin = dayTime.toISOString().substr(0, 10);
+        blocks.push(dataMap[dayBin] || { day: dayBin, uptime: null });
+      }
+    } else {
+      // No data yet - create empty blocks
+      for (let i = daysToShow - 1; i >= 0; i--) {
+        const dayTime = new Date(now.getTime() - (i * 24 * 60 * 60 * 1000));
+        const dayBin = dayTime.toISOString().substr(0, 10);
+        blocks.push({ day: dayBin, uptime: null });
+      }
+    }
+    
+    blocks.forEach((point) => {
+      const block = document.createElement('div');
+      block.className = 'uptime-block';
+      
+      const uptime = point.uptime;
+      
+      if (uptime === null || uptime === undefined) {
+        block.classList.add('unknown');
+        const dayDate = new Date(point.day);
+        block.title = `${dayDate.toLocaleDateString()}\nNo data`;
+      } else if (uptime >= 99) {
+        block.classList.add('up');
+        const dayDate = new Date(point.day);
+        block.title = `${dayDate.toLocaleDateString()}\n${uptime}% uptime`;
+      } else if (uptime >= 50) {
+        block.classList.add('degraded');
+        const dayDate = new Date(point.day);
+        block.title = `${dayDate.toLocaleDateString()}\n${uptime}% uptime`;
+      } else {
+        block.classList.add('down');
+        const dayDate = new Date(point.day);
+        block.title = `${dayDate.toLocaleDateString()}\n${uptime}% uptime`;
+      }
+      
+      bar.appendChild(block);
+    });
+  });
+}
+
 async function refresh() {
   try {
     const live = await j('/api/check');
@@ -160,17 +254,24 @@ async function refresh() {
   }
 
   try {
-    const metrics = await j(`/api/metrics?hours=${HOURS}`);
-    $('#window').textContent = `Last ${HOURS}h`;
-    renderChart(metrics.overall || {});
+    const metrics = await j(`/api/metrics?days=${DAYS}`);
+    $('#window').textContent = `Last ${DAYS} days`;
+    
+    try {
+      renderChart(metrics.overall || {});
+    } catch (chartErr) {
+      // Chart rendering failed - silent failure
+    }
+    
     renderIncidents(metrics.downs || []);
+    renderUptimeBars(metrics, DAYS);
   } catch (e) {
-    console.warn('metrics unavailable yet', e);
+    // Metrics unavailable - render with no data
+    renderUptimeBars(null, DAYS);
   }
 }
 
 async function doLoginFlow() {
-  console.log('doLoginFlow called');
   const dlg = document.getElementById('loginModal');
   const err = $('#loginError', dlg);
   err.classList.add('hidden');
@@ -180,7 +281,6 @@ async function doLoginFlow() {
   $('#u', dlg).value = '';
   $('#p', dlg).value = '';
   
-  console.log('Showing login modal');
   dlg.showModal();
 }
 
@@ -412,7 +512,7 @@ async function loadAlertsConfig() {
       $('#alertOnUp').checked = config.alert_on_up || false;
     }
   } catch (err) {
-    console.log('No alerts config found or error loading:', err);
+    // No alerts config available
   }
 }
 
@@ -563,4 +663,22 @@ window.addEventListener('load', () => {
   $$('.monitorToggle').forEach(toggle => 
     toggle.addEventListener('change', (e) => toggleMonitoring(e.target.closest('.card'), e.target.checked))
   );
+  
+  // Uptime filter dropdown
+  const uptimeFilter = $('#uptimeFilter');
+  if (uptimeFilter) {
+    uptimeFilter.addEventListener('change', async (e) => {
+      DAYS = parseInt(e.target.value);
+      
+      // Fetch new metrics and re-render
+      try {
+        const metrics = await j(`/api/metrics?days=${DAYS}`);
+        $('#window').textContent = `Last ${DAYS} days`;
+        renderUptimeBars(metrics, DAYS);
+      } catch (err) {
+        console.error('Failed to fetch metrics for new time range', err);
+        renderUptimeBars(null, DAYS);
+      }
+    });
+  }
 });

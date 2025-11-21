@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"status/app/internal/checker"
 	"status/app/internal/database"
@@ -50,32 +51,66 @@ func HandleCheck(services []*models.Service) http.HandlerFunc {
 // HandleMetrics returns historical uptime metrics
 func HandleMetrics() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		hours := 24
-		if q := r.URL.Query().Get("hours"); q != "" {
+		days := 7
+		hours := 0
+		
+		// Support both days and hours parameters
+		if q := r.URL.Query().Get("days"); q != "" {
 			if n, err := strconv.Atoi(q); err == nil {
 				if n < 1 {
 					n = 1
 				}
-				if n > 24*90 {
-					n = 24 * 90
+				if n > 365 {
+					n = 365
+				}
+				days = n
+				hours = days * 24
+			}
+		} else if q := r.URL.Query().Get("hours"); q != "" {
+			if n, err := strconv.Atoi(q); err == nil {
+				if n < 1 {
+					n = 1
+				}
+				if n > 24*365 {
+					n = 24 * 365
 				}
 				hours = n
+				days = 0
 			}
+		} else {
+			hours = 24
 		}
-		since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour).Format(time.RFC3339)
+		
+		var since string
+		var groupBy string
+		var timeField string
+		
+		if days > 0 {
+			// Use daily aggregation
+			since = time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour).Format(time.RFC3339)
+			groupBy = "substr(taken_at,1,10)"
+			timeField = "day"
+		} else {
+			// Use hourly aggregation
+			since = time.Now().UTC().Add(-time.Duration(hours) * time.Hour).Format(time.RFC3339)
+			groupBy = "substr(taken_at,1,13) || ':00:00Z'"
+			timeField = "hour"
+		}
 
-		rows, err := database.DB.Query(`
-WITH hourly AS (
+		query := fmt.Sprintf(`
+WITH aggregated AS (
   SELECT service_key,
-         substr(taken_at,1,13) || ':00:00Z' AS hour_bin,
+         %s AS time_bin,
          SUM(ok) AS up_count,
          COUNT(*) AS total_count
   FROM samples
   WHERE taken_at >= ?
-  GROUP BY service_key, hour_bin
+  GROUP BY service_key, time_bin
 )
-SELECT service_key, hour_bin, up_count, total_count
-FROM hourly ORDER BY hour_bin ASC`, since)
+SELECT service_key, time_bin, up_count, total_count
+FROM aggregated ORDER BY time_bin ASC`, groupBy)
+
+		rows, err := database.DB.Query(query, since)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
@@ -84,14 +119,14 @@ FROM hourly ORDER BY hour_bin ASC`, since)
 
 		series := map[string][]map[string]any{}
 		for rows.Next() {
-			var key, hb string
+			var key, tb string
 			var up, total int
-			_ = rows.Scan(&key, &hb, &up, &total)
+			_ = rows.Scan(&key, &tb, &up, &total)
 			u := 0
 			if total > 0 {
 				u = int((float64(up)/float64(total))*100 + 0.5)
 			}
-			series[key] = append(series[key], map[string]any{"hour": hb, "uptime": u})
+			series[key] = append(series[key], map[string]any{timeField: tb, "uptime": u})
 		}
 
 		overall := map[string]float64{}
@@ -109,10 +144,11 @@ FROM hourly ORDER BY hour_bin ASC`, since)
 		}
 
 		downs := []map[string]any{}
+		downsSince := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
 		rows3, err := database.DB.Query(`SELECT taken_at, service_key, http_status
                              FROM samples
-                             WHERE ok=0 AND taken_at >= datetime('now','-24 hours')
-                             ORDER BY taken_at DESC LIMIT 50`)
+                             WHERE ok=0 AND taken_at >= ?
+                             ORDER BY taken_at DESC LIMIT 50`, downsSince)
 		if err == nil {
 			defer rows3.Close()
 			for rows3.Next() {
@@ -123,12 +159,19 @@ FROM hourly ORDER BY hour_bin ASC`, since)
 			}
 		}
 
+		response := map[string]any{
+			"series":  series,
+			"overall": overall,
+			"downs":   downs,
+		}
+		
+		if days > 0 {
+			response["window_days"] = days
+		} else {
+			response["window_hours"] = hours
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"window_hours": hours,
-			"series":       series,
-			"overall":      overall,
-			"downs":        downs,
-		})
+		_ = json.NewEncoder(w).Encode(response)
 	}
 }
