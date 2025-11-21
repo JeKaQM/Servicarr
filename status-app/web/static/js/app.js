@@ -90,6 +90,13 @@ function updCard(id,data) {
   pill.className = cls(data.ok, data.status, data.degraded);
   k.textContent = fmtMs(data.ms);
   h.textContent = data.status ? ('HTTP '+data.status) : 'no response';
+  
+  // Update last check time
+  const lastCheckEl = $(`#last-check-${id.split('-').pop()}`);
+  if (lastCheckEl) {
+    const now = new Date();
+    lastCheckEl.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  }
 }
 
 async function toggleMonitoring(card, enabled) {
@@ -149,6 +156,43 @@ function renderIncidents(items) {
   }).join('');
 }
 
+function updateServiceStats(metrics) {
+  const services = ['server', 'plex', 'overseerr'];
+  
+  services.forEach(key => {
+    const uptimeEl = $(`#uptime-24h-${key}`);
+    const avgResponseEl = $(`#avg-response-${key}`);
+    
+    if (uptimeEl && metrics.overall) {
+      const uptime = metrics.overall[key] || 0;
+      uptimeEl.textContent = `${uptime.toFixed(1)}%`;
+      uptimeEl.className = 'stat-value ' + (uptime >= 99 ? 'good' : uptime >= 95 ? 'warning' : 'bad');
+    }
+    
+    if (avgResponseEl && metrics.series && metrics.series[key]) {
+      const data = metrics.series[key];
+      let totalMs = 0;
+      let count = 0;
+      
+      data.forEach(point => {
+        if (point.avg_ms && point.avg_ms > 0) {
+          totalMs += point.avg_ms;
+          count++;
+        }
+      });
+      
+      if (count > 0) {
+        const avgMs = totalMs / count;
+        avgResponseEl.textContent = `${Math.round(avgMs)}ms`;
+        avgResponseEl.className = 'stat-value ' + (avgMs < 100 ? 'good' : avgMs < 500 ? 'warning' : 'bad');
+      } else {
+        avgResponseEl.textContent = '—';
+        avgResponseEl.className = 'stat-value';
+      }
+    }
+  });
+}
+
 function renderUptimeBars(metrics, days) {
   const daysToShow = days || DAYS;
   const services = ['server', 'plex', 'overseerr'];
@@ -158,8 +202,8 @@ function renderUptimeBars(metrics, days) {
   // Update global timestamp once
   const globalTimestamp = $('#timestamp-global');
   if (globalTimestamp) {
-    const startDate = new Date(daysAgo);
-    globalTimestamp.textContent = `Tracking since ${startDate.toLocaleDateString()}`;
+    const today = now.toLocaleDateString();
+    globalTimestamp.textContent = `Tracking from ${today} • Hover over blocks for details`;
   }
   
   services.forEach(key => {
@@ -167,6 +211,9 @@ function renderUptimeBars(metrics, days) {
     const uptimePercent = $(`#uptime-${key}`);
     
     if (!bar) return;
+    
+    // Add data attribute for CSS styling based on day count
+    bar.setAttribute('data-days', daysToShow);
     
     const data = (metrics && metrics.series) ? metrics.series[key] || [] : [];
     const overall = (metrics && metrics.overall) ? metrics.overall[key] || 0 : 0;
@@ -218,23 +265,25 @@ function renderUptimeBars(metrics, days) {
       block.className = 'uptime-block';
       
       const uptime = point.uptime;
+      const dayDate = new Date(point.day);
+      const formattedDate = dayDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: daysToShow > 90 ? 'numeric' : undefined 
+      });
       
       if (uptime === null || uptime === undefined) {
         block.classList.add('unknown');
-        const dayDate = new Date(point.day);
-        block.title = `${dayDate.toLocaleDateString()}\nNo data`;
+        block.title = `${formattedDate}\nNo data available`;
       } else if (uptime >= 99) {
         block.classList.add('up');
-        const dayDate = new Date(point.day);
-        block.title = `${dayDate.toLocaleDateString()}\n${uptime}% uptime`;
+        block.title = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✓ Operational`;
       } else if (uptime >= 50) {
         block.classList.add('degraded');
-        const dayDate = new Date(point.day);
-        block.title = `${dayDate.toLocaleDateString()}\n${uptime}% uptime`;
+        block.title = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n⚠ Degraded performance`;
       } else {
         block.classList.add('down');
-        const dayDate = new Date(point.day);
-        block.title = `${dayDate.toLocaleDateString()}\n${uptime}% uptime`;
+        block.title = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✗ Significant downtime`;
       }
       
       bar.appendChild(block);
@@ -265,6 +314,10 @@ async function refresh() {
     
     renderIncidents(metrics.downs || []);
     renderUptimeBars(metrics, DAYS);
+    
+    // Fetch 24h stats for the service cards
+    const stats24h = await j('/api/metrics?hours=24');
+    updateServiceStats(stats24h);
   } catch (e) {
     // Metrics unavailable - render with no data
     renderUptimeBars(null, DAYS);

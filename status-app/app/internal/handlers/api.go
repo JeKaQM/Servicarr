@@ -102,12 +102,13 @@ WITH aggregated AS (
   SELECT service_key,
          %s AS time_bin,
          SUM(ok) AS up_count,
-         COUNT(*) AS total_count
+         COUNT(*) AS total_count,
+         AVG(latency_ms) AS avg_ms
   FROM samples
   WHERE taken_at >= ?
   GROUP BY service_key, time_bin
 )
-SELECT service_key, time_bin, up_count, total_count
+SELECT service_key, time_bin, up_count, total_count, avg_ms
 FROM aggregated ORDER BY time_bin ASC`, groupBy)
 
 		rows, err := database.DB.Query(query, since)
@@ -121,12 +122,17 @@ FROM aggregated ORDER BY time_bin ASC`, groupBy)
 		for rows.Next() {
 			var key, tb string
 			var up, total int
-			_ = rows.Scan(&key, &tb, &up, &total)
+			var avgMs sql.NullFloat64
+			_ = rows.Scan(&key, &tb, &up, &total, &avgMs)
 			u := 0
 			if total > 0 {
 				u = int((float64(up)/float64(total))*100 + 0.5)
 			}
-			series[key] = append(series[key], map[string]any{timeField: tb, "uptime": u})
+			point := map[string]any{timeField: tb, "uptime": u}
+			if avgMs.Valid {
+				point["avg_ms"] = avgMs.Float64
+			}
+			series[key] = append(series[key], point)
 		}
 
 		overall := map[string]float64{}
