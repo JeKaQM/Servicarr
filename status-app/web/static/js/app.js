@@ -272,23 +272,83 @@ function renderUptimeBars(metrics, days) {
         year: daysToShow > 90 ? 'numeric' : undefined 
       });
       
+      let tooltipText = '';
       if (uptime === null || uptime === undefined) {
         block.classList.add('unknown');
-        block.title = `${formattedDate}\nNo data available`;
+        tooltipText = `${formattedDate}\nNo data available`;
       } else if (uptime >= 99) {
         block.classList.add('up');
-        block.title = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✓ Operational`;
+        tooltipText = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✓ Operational`;
       } else if (uptime >= 50) {
         block.classList.add('degraded');
-        block.title = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n⚠ Degraded performance`;
+        tooltipText = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n⚠ Degraded performance`;
       } else {
         block.classList.add('down');
-        block.title = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✗ Significant downtime`;
+        tooltipText = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✗ Significant downtime`;
       }
+      
+      block.title = tooltipText;
+      block.setAttribute('data-tooltip', tooltipText);
+      
+      // Add mobile-friendly touch feedback
+      block.addEventListener('touchstart', (e) => {
+        // Show a quick visual feedback on touch
+        block.style.transition = 'transform 0.1s';
+        
+        // Create temporary tooltip for mobile
+        const isMobile = window.innerWidth <= 768;
+        if (isMobile && tooltipText) {
+          showMobileTooltip(block, tooltipText, e.touches[0]);
+        }
+      });
+      
+      block.addEventListener('touchend', () => {
+        block.style.transition = '';
+      });
       
       bar.appendChild(block);
     });
   });
+}
+
+// Mobile tooltip function for uptime blocks
+let tooltipTimeout;
+function showMobileTooltip(element, text, touch) {
+  // Remove any existing tooltip
+  const existingTooltip = document.querySelector('.mobile-tooltip');
+  if (existingTooltip) {
+    existingTooltip.remove();
+  }
+  
+  clearTimeout(tooltipTimeout);
+  
+  const tooltip = document.createElement('div');
+  tooltip.className = 'mobile-tooltip';
+  tooltip.textContent = text.replace(/\n/g, ' • ');
+  tooltip.style.cssText = `
+    position: fixed;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    z-index: 10000;
+    pointer-events: none;
+    max-width: 80vw;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    left: 50%;
+    top: ${touch ? touch.clientY - 60 : 100}px;
+    transform: translateX(-50%);
+    animation: fadeIn 0.2s ease-in;
+  `;
+  
+  document.body.appendChild(tooltip);
+  
+  tooltipTimeout = setTimeout(() => {
+    tooltip.style.animation = 'fadeOut 0.2s ease-out';
+    setTimeout(() => tooltip.remove(), 200);
+  }, 2000);
 }
 
 async function refresh() {
