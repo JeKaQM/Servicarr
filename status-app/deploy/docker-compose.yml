@@ -1,12 +1,9 @@
 services:
   status:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    image: yourname/status:local
+    image: jekaq/statusapp:latest
+    container_name: statusapp
     env_file:
       - ../.env
-
     ports:
       - "4555:4555"
     volumes:
@@ -15,3 +12,5 @@ services:
 
 volumes:
   status_data:
+    name: statusapp_data
+    external: false
