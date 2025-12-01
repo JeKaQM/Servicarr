@@ -166,7 +166,8 @@ function updateServiceStats(metrics) {
     if (uptimeEl && metrics.overall) {
       const uptime = metrics.overall[key] || 0;
       uptimeEl.textContent = `${uptime.toFixed(1)}%`;
-      uptimeEl.className = 'stat-value ' + (uptime >= 99 ? 'good' : uptime >= 95 ? 'warning' : 'bad');
+      // Green only for 100%, orange for <100%, red for <50%
+      uptimeEl.className = 'stat-value ' + (uptime >= 100 ? 'good' : uptime >= 50 ? 'warning' : 'bad');
     }
     
     if (avgResponseEl && metrics.series && metrics.series[key]) {
@@ -225,7 +226,8 @@ function renderUptimeBars(metrics, days) {
         uptimePercent.style.color = 'var(--text-dim)';
       } else {
         uptimePercent.textContent = `${overall.toFixed(1)}%`;
-        uptimePercent.style.color = overall >= 99 ? 'var(--ok)' : overall >= 95 ? 'var(--warn)' : 'var(--down)';
+        // Green only for 100%, orange for <100%, red for <50%
+        uptimePercent.style.color = overall >= 100 ? 'var(--ok)' : overall >= 50 ? 'var(--warn)' : 'var(--down)';
       }
     }
     
@@ -240,8 +242,10 @@ function renderUptimeBars(metrics, days) {
       // Fill in missing days with null data
       const dataMap = {};
       data.forEach(point => {
-        if (point.day) {
-          dataMap[point.day] = point;
+        // API returns 'day' field for daily aggregation
+        const dayKey = point.day || point.hour?.substr(0, 10);
+        if (dayKey) {
+          dataMap[dayKey] = point;
         }
       });
       
@@ -276,15 +280,18 @@ function renderUptimeBars(metrics, days) {
       if (uptime === null || uptime === undefined) {
         block.classList.add('unknown');
         tooltipText = `${formattedDate}\nNo data available`;
-      } else if (uptime >= 99) {
+      } else if (uptime >= 100) {
+        // 100% uptime = green
         block.classList.add('up');
-        tooltipText = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✓ Operational`;
+        tooltipText = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✓ Fully operational`;
       } else if (uptime >= 50) {
+        // 50-99% uptime = orange (partial outage)
         block.classList.add('degraded');
-        tooltipText = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n⚠ Degraded performance`;
+        tooltipText = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n⚠ Partial outage`;
       } else {
+        // Below 50% = red (major outage)
         block.classList.add('down');
-        tooltipText = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✗ Significant downtime`;
+        tooltipText = `${formattedDate}\n${uptime.toFixed(1)}% uptime\n✗ Major outage`;
       }
       
       block.title = tooltipText;
