@@ -4,8 +4,6 @@ window.getCsrf = function() {
 };
 
 window.showToast = function(message, type = 'success') {
-    console.log('showToast called with:', message, type);
-    
     // Remove any existing toast
     const existing = document.querySelector('.toast');
     if (existing) {

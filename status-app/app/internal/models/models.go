@@ -56,3 +56,12 @@ type BlockInfo struct {
 	Attempts  int
 	ExpiresAt string
 }
+
+// StatusAlert represents a site-wide or service-specific alert banner
+type StatusAlert struct {
+	ID         string `json:"id"`
+	ServiceKey string `json:"service_key"`
+	Message    string `json:"message"`
+	Level      string `json:"level"`
+	CreatedAt  string `json:"created_at"`
+}

@@ -74,6 +74,14 @@ CREATE TABLE IF NOT EXISTS service_status_history (
   degraded INTEGER NOT NULL,
   updated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS status_alerts (
+  id TEXT PRIMARY KEY,
+  service_key TEXT,
+  message TEXT NOT NULL,
+  level TEXT NOT NULL DEFAULT 'info',
+  created_at TEXT NOT NULL
+);
 `)
 	return err
 }

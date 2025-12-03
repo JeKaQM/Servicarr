@@ -34,6 +34,18 @@ func SetupRoutes(authMgr *auth.Auth, alertMgr *alerts.Manager, services []*model
 		}
 	}))
 	authAPI.HandleFunc("/api/admin/alerts/test", authMgr.RequireAuth(HandleTestEmail(alertMgr)))
+	authAPI.HandleFunc("/api/admin/status-alerts", authMgr.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			HandleGetStatusAlerts()(w, r)
+		case http.MethodPost:
+			HandleCreateStatusAlert()(w, r)
+		case http.MethodDelete:
+			HandleDeleteStatusAlert()(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
 
 	// Auth routes
 	authAPI.HandleFunc("/api/me", HandleWhoAmI(authMgr))
@@ -46,6 +58,7 @@ func SetupRoutes(authMgr *auth.Auth, alertMgr *alerts.Manager, services []*model
 	mux.Handle("/api/login", security.RateLimit(http.HandlerFunc(HandleLogin(authMgr))))
 	mux.Handle("/api/logout", security.RateLimit(http.HandlerFunc(HandleLogout(authMgr))))
 	mux.Handle("/api/me", security.RateLimit(http.HandlerFunc(HandleWhoAmI(authMgr))))
+	mux.HandleFunc("/api/status-alerts", HandleGetStatusAlerts()) // Public, no rate limit
 	mux.Handle("/api/", security.RateLimit(api))
 	mux.HandleFunc("/static/", HandleStatic())
 	mux.HandleFunc("/favicon.ico", HandleFavicon())
