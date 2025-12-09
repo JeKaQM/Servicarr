@@ -22,7 +22,17 @@ func HandleIngestNow(services []*models.Service) http.HandlerFunc {
 			if s.Disabled {
 				continue
 			}
-			ok, code, ms, _ := checker.HTTPCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
+			checkOK, code, ms, _ := checker.HTTPCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
+			
+			// Update consecutive failure count
+			if checkOK {
+				s.ConsecutiveFailures = 0
+			} else {
+				s.ConsecutiveFailures++
+			}
+			
+			// Service is only DOWN after 2 consecutive failures
+			ok := checkOK || s.ConsecutiveFailures < 2
 			database.InsertSample(now, s.Key, ok, code, ms)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -66,7 +76,17 @@ func HandleAdminCheck(services []*models.Service) http.HandlerFunc {
 		}
 
 		now := time.Now().UTC()
-		ok, code, ms, _ := checker.HTTPCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
+		checkOK, code, ms, _ := checker.HTTPCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
+		
+		// Update consecutive failure count
+		if checkOK {
+			s.ConsecutiveFailures = 0
+		} else {
+			s.ConsecutiveFailures++
+		}
+		
+		// Service is only DOWN after 2 consecutive failures
+		ok := checkOK || s.ConsecutiveFailures < 2
 		database.InsertSample(now, s.Key, ok, code, ms)
 
 		degraded := ok && ms != nil && *ms > 200

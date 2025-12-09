@@ -4,13 +4,14 @@ import "time"
 
 // Service represents a monitored service
 type Service struct {
-	Key      string
-	Label    string
-	URL      string
-	Timeout  time.Duration
-	MinOK    int
-	MaxOK    int
-	Disabled bool `json:"disabled"`
+	Key                 string
+	Label               string
+	URL                 string
+	Timeout             time.Duration
+	MinOK               int
+	MaxOK               int
+	Disabled            bool `json:"disabled"`
+	ConsecutiveFailures int  // Track consecutive check failures
 }
 
 // LiveResult represents the current status of a service
