@@ -248,6 +248,7 @@ func HandleTestEmail(alertMgr *alerts.Manager) http.HandlerFunc {
 			"Test Service",
 			"test",
 			"This is a test email from your Servicarr monitoring system. If you received this, your email configuration is working correctly!",
+			alertMgr.GetStatusPageURL(),
 		)
 
 		err := alertMgr.SendEmail(subject, body)

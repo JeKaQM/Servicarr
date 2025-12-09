@@ -25,6 +25,7 @@ type Config struct {
 	DBPath          string
 	EnableScheduler bool
 	PollInterval    time.Duration
+	StatusPageURL   string
 
 	// Services (loaded from env)
 	ServiceConfigs []ServiceConfig
@@ -45,13 +46,14 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		AuthUser:       getenv("AUTH_USER", "admin"),
-		InsecureDev:    envBool("INSECURE_DEV", true),
-		SessionMaxAgeS: envInt("SESSION_MAX_AGE_SECONDS", 86400),
-		Port:           getenv("PORT", "4555"),
-		DBPath:         getenv("DB_PATH", "./uptime.db"),
+		AuthUser:        getenv("AUTH_USER", "admin"),
+		InsecureDev:     envBool("INSECURE_DEV", true),
+		SessionMaxAgeS:  envInt("SESSION_MAX_AGE_SECONDS", 86400),
+		Port:            getenv("PORT", "4555"),
+		DBPath:          getenv("DB_PATH", "./uptime.db"),
 		EnableScheduler: strings.ToLower(getenv("ENABLE_SCHEDULER", "true")) == "true",
-		PollInterval:   envDurSecs("POLL_SECONDS", 60),
+		PollInterval:    envDurSecs("POLL_SECONDS", 60),
+		StatusPageURL:   getenv("STATUS_PAGE_URL", ""),
 	}
 
 	// Load auth password/hash

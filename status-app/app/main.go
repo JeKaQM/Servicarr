@@ -37,7 +37,7 @@ cfg.SessionMaxAgeS,
 )
 
 // Create alert manager (loads config from database)
-alertMgr := alerts.NewManager()
+alertMgr := alerts.NewManager(cfg.StatusPageURL)
 
 // Convert service configs to service models
 services := make([]*models.Service, 0, len(cfg.ServiceConfigs))
