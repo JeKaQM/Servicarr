@@ -4,13 +4,14 @@ import "time"
 
 // Service represents a monitored service
 type Service struct {
-	Key      string
-	Label    string
-	URL      string
-	Timeout  time.Duration
-	MinOK    int
-	MaxOK    int
-	Disabled bool `json:"disabled"`
+	Key                 string
+	Label               string
+	URL                 string
+	Timeout             time.Duration
+	MinOK               int
+	MaxOK               int
+	Disabled            bool `json:"disabled"`
+	ConsecutiveFailures int  // Track consecutive check failures
 }
 
 // LiveResult represents the current status of a service
@@ -64,4 +65,13 @@ type BlockInfo struct {
 	IP        string
 	Attempts  int
 	ExpiresAt string
+}
+
+// StatusAlert represents a site-wide or service-specific alert banner
+type StatusAlert struct {
+	ID         string `json:"id"`
+	ServiceKey string `json:"service_key"`
+	Message    string `json:"message"`
+	Level      string `json:"level"`
+	CreatedAt  string `json:"created_at"`
 }

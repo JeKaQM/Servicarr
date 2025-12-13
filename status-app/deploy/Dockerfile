@@ -13,6 +13,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata wget && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/status /usr/local/bin/status
 COPY web/ ./web/
+RUN mkdir -p /data
 VOLUME ["/data"]
 ENV TZ=Europe/London \
     PORT=4555 \

@@ -12,13 +12,14 @@ import (
 
 // Manager handles email alert functionality
 type Manager struct {
-	config *models.AlertConfig
+	config        *models.AlertConfig
+	statusPageURL string
 }
 
 // NewManager creates a new alerts manager
-func NewManager() *Manager {
+func NewManager(statusPageURL string) *Manager {
 	config, _ := database.LoadAlertConfig()
-	return &Manager{config: config}
+	return &Manager{config: config, statusPageURL: statusPageURL}
 }
 
 // ReloadConfig reloads the alert configuration from database
@@ -34,6 +35,11 @@ func (m *Manager) ReloadConfig() error {
 // GetConfig returns the current alert configuration
 func (m *Manager) GetConfig() *models.AlertConfig {
 	return m.config
+}
+
+// GetStatusPageURL returns the configured status page URL
+func (m *Manager) GetStatusPageURL() string {
+	return m.statusPageURL
 }
 
 // SetConfig updates the alert configuration
@@ -102,19 +108,19 @@ func (m *Manager) CheckAndSendAlerts(serviceKey, serviceName string, ok, degrade
 		// Service went down
 		subject := fmt.Sprintf("🔴 Service Down: %s", serviceName)
 		message := fmt.Sprintf("The service <strong>%s</strong> is currently unreachable and not responding to health checks. Please investigate immediately.", serviceName)
-		body := CreateHTMLEmail(subject, "down", serviceName, serviceKey, message)
+		body := CreateHTMLEmail(subject, "down", serviceName, serviceKey, message, m.statusPageURL)
 		go m.SendEmail(subject, body)
 	} else if ok && !prevOKBool && m.config.AlertOnUp {
 		// Service came back up
 		subject := fmt.Sprintf("✅ Service Recovered: %s", serviceName)
 		message := fmt.Sprintf("Great news! The service <strong>%s</strong> has recovered and is now responding normally to health checks.", serviceName)
-		body := CreateHTMLEmail(subject, "up", serviceName, serviceKey, message)
+		body := CreateHTMLEmail(subject, "up", serviceName, serviceKey, message, m.statusPageURL)
 		go m.SendEmail(subject, body)
 	} else if ok && degraded && !prevDegradedBool && m.config.AlertOnDegraded {
 		// Service became degraded
 		subject := fmt.Sprintf("⚠️ Service Degraded: %s", serviceName)
 		message := fmt.Sprintf("The service <strong>%s</strong> is responding but experiencing high latency (over 200ms). Performance may be impacted.", serviceName)
-		body := CreateHTMLEmail(subject, "degraded", serviceName, serviceKey, message)
+		body := CreateHTMLEmail(subject, "degraded", serviceName, serviceKey, message, m.statusPageURL)
 		go m.SendEmail(subject, body)
 	}
 
@@ -125,7 +131,7 @@ func (m *Manager) CheckAndSendAlerts(serviceKey, serviceName string, ok, degrade
 }
 
 // CreateHTMLEmail generates a styled HTML email
-func CreateHTMLEmail(subject, statusType, serviceName, serviceKey, message string) string {
+func CreateHTMLEmail(subject, statusType, serviceName, serviceKey, message, statusPageURL string) string {
 	// Status colors and text
 	statusColors := map[string]string{
 		"down":     "#ef4444",
@@ -140,6 +146,11 @@ func CreateHTMLEmail(subject, statusType, serviceName, serviceKey, message strin
 
 	color := statusColors[statusType]
 	statusText := statusTexts[statusType]
+	
+	// Default URL if not set
+	if statusPageURL == "" {
+		statusPageURL = "#"
+	}
 
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -201,7 +212,7 @@ func CreateHTMLEmail(subject, statusType, serviceName, serviceKey, message strin
                             <table width="100%%" cellpadding="0" cellspacing="0" style="margin-top: 30px;">
                                 <tr>
                                     <td align="center">
-                                        <a href="/" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 14px;">
+                                        <a href="%s" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 14px;">
                                             View Status Dashboard
                                         </a>
                                     </td>
@@ -227,7 +238,7 @@ func CreateHTMLEmail(subject, statusType, serviceName, serviceKey, message strin
         </tr>
     </table>
 </body>
-</html>`, subject, color, statusText, serviceName, message, serviceName, color, statusText, time.Now().Format("Monday, January 2, 2006 at 3:04 PM MST"))
+</html>`, subject, color, statusText, serviceName, message, serviceName, color, statusText, time.Now().Format("Monday, January 2, 2006 at 3:04 PM MST"), statusPageURL)
 
 	return html
 }

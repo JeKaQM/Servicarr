@@ -6,7 +6,7 @@
   <title>Service Status</title>
   <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg"/>
   <meta name="theme-color" content="#0c121c"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <link rel="stylesheet" href="/static/css/main.css"/>
   <link rel="stylesheet" href="/static/css/blocks.css"/>
@@ -18,6 +18,9 @@
   <script src="/static/js/blocks.js" defer></script>
 </head>
 <body>
+  <!-- Site Alerts Banner -->
+  <div id="siteAlerts"></div>
+
   <header>
     <div class="brand">
       <h1>Service Status</h1>
@@ -35,7 +38,7 @@
       <div class="row">
         <div class="row-left">
           <img src="/static/images/server.svg" class="icon" alt="Server"/>
-          <div><strong>Server</strong><div class="label">Reachability</div></div>
+          <div><strong>Server</strong><div class="label">Health Check</div></div>
         </div>
         <span class="pill warn">—</span>
       </div>
@@ -73,7 +76,7 @@
       <div class="row">
         <div class="row-left">
           <img src="/static/images/plex.svg" class="icon" alt="Plex"/>
-          <div><strong>Plex</strong><div class="label">/identity</div></div>
+          <div><strong>Plex</strong><div class="label">Media Server</div></div>
         </div>
         <span class="pill warn">—</span>
       </div>
@@ -111,7 +114,7 @@
       <div class="row">
         <div class="row-left">
           <img src="/static/images/overseerr.svg" class="icon" alt="Overseerr"/>
-          <div><strong>Overseerr</strong><div class="label">/api/v1/status</div></div>
+          <div><strong>Overseerr</strong><div class="label">Request Management</div></div>
         </div>
         <span class="pill warn">—</span>
       </div>
@@ -231,7 +234,7 @@
     <div class="service-uptime">
       <div class="service-uptime-header">
         <span class="service-name">Server</span>
-        <span class="protocol-badge">TCP</span>
+        <span class="protocol-badge">WG HTTP</span>
         <span class="uptime-percent" id="uptime-server">—%</span>
       </div>
       <div class="uptime-bar-container">
@@ -243,7 +246,7 @@
     <div class="service-uptime">
       <div class="service-uptime-header">
         <span class="service-name">Plex</span>
-        <span class="protocol-badge">HTTPS</span>
+        <span class="protocol-badge">WG HTTP</span>
         <span class="uptime-percent" id="uptime-plex">—%</span>
       </div>
       <div class="uptime-bar-container">
@@ -255,7 +258,7 @@
     <div class="service-uptime">
       <div class="service-uptime-header">
         <span class="service-name">Overseerr</span>
-        <span class="protocol-badge">HTTPS</span>
+        <span class="protocol-badge">WG HTTP</span>
         <span class="uptime-percent" id="uptime-overseerr">—%</span>
       </div>
       <div class="uptime-bar-container">
@@ -295,9 +298,10 @@
   <section id="adminPanel" class="card admin-panel admin hidden">
     <div class="admin-tabs">
       <button class="tab-btn active" data-tab="main">Main</button>
+      <button class="tab-btn" data-tab="banners">Banners</button>
       <button class="tab-btn" data-tab="security">Security</button>
       <button class="tab-btn" data-tab="resources">Resources</button>
-      <button class="tab-btn" data-tab="alerts">Alerts</button>
+  <button class="tab-btn" data-tab="alerts">Email</button>
     </div>
 
     <!-- Main Tab -->
@@ -310,6 +314,65 @@
           <button id="ingestNowTab" class="btn">Check All Services Now</button>
           <button id="resetRecentTab" class="btn danger">Reset Recent Incidents</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Banners Tab -->
+    <div id="tab-banners" class="tab-content">
+      <h2>Status Banners</h2>
+      <p class="muted">Show alerts/banners to visitors about service issues or maintenance</p>
+      
+      <div class="admin-section">
+        <h3>Create Banner</h3>
+        <div class="form-group">
+          <label for="bannerService">Scope</label>
+          <select id="bannerService">
+            <option value="">Global (top of page)</option>
+            <option value="server">Server</option>
+            <option value="plex">Plex</option>
+            <option value="overseerr">Overseerr</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="bannerTemplate">Quick Templates</label>
+          <select id="bannerTemplate">
+            <option value="">-- Select a template --</option>
+            <optgroup label="Maintenance">
+              <option value="Scheduled maintenance in progress. Service may be temporarily unavailable.">Scheduled maintenance in progress</option>
+              <option value="Maintenance complete. All services restored.">Maintenance complete</option>
+              <option value="Scheduled maintenance tonight between 10 PM - 12 AM.">Scheduled maintenance tonight</option>
+            </optgroup>
+            <optgroup label="Issues">
+              <option value="We are aware of issues and investigating.">Investigating issues</option>
+              <option value="Experiencing degraded performance. Working on a fix.">Degraded performance</option>
+              <option value="Service is currently down. We are working to restore it.">Service down</option>
+              <option value="Intermittent connectivity issues. Please retry if needed.">Intermittent issues</option>
+            </optgroup>
+            <optgroup label="Updates">
+              <option value="Issue has been resolved. Thank you for your patience.">Issue resolved</option>
+              <option value="Update in progress. New features coming soon!">Update in progress</option>
+              <option value="Service restored and operating normally.">Service restored</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="bannerMessage">Message</label>
+          <input type="text" id="bannerMessage" placeholder="e.g., Scheduled maintenance tonight 10-11 PM" />
+        </div>
+        <div class="form-group">
+          <label for="bannerLevel">Type</label>
+          <select id="bannerLevel">
+            <option value="info">Info (Blue)</option>
+            <option value="warning">Warning (Yellow)</option>
+            <option value="error">Error (Red)</option>
+          </select>
+        </div>
+        <div class="ops">
+          <button id="createBanner" class="btn">Create Banner</button>
+        </div>
+        
+        <h3 style="margin-top: 20px;">Active Banners</h3>
+        <div id="bannersList"></div>
       </div>
     </div>
 

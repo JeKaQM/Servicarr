@@ -31,7 +31,17 @@ func HandleCheck(services []*models.Service) http.HandlerFunc {
 				}
 				continue
 			}
-			ok, code, ms, _ := checker.HTTPCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
+			checkOK, code, ms, _ := checker.HTTPCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
+			
+			// Update consecutive failure count
+			if checkOK {
+				s.ConsecutiveFailures = 0
+			} else {
+				s.ConsecutiveFailures++
+			}
+			
+			// Service is only DOWN after 2 consecutive failures
+			ok := checkOK || s.ConsecutiveFailures < 2
 			degraded := ok && ms != nil && *ms > 200
 			out.Status[s.Key] = models.LiveResult{
 				Label:    s.Label,

@@ -167,7 +167,7 @@ function setupBlocksAdmin() {
             }
         });
     });
-    observer.observe(blocksAdmin, { attributes: true });
+    observer.observe(adminPanel, { attributes: true });
 }
 
 // Initialize when login state changes

@@ -38,7 +38,7 @@ cfg.SessionMaxAgeS,
 )
 
 // Create alert manager (loads config from database)
-alertMgr := alerts.NewManager()
+alertMgr := alerts.NewManager(cfg.StatusPageURL)
 
 // Convert service configs to service models
 services := make([]*models.Service, 0, len(cfg.ServiceConfigs))
@@ -100,20 +100,30 @@ continue
 }
 
 // Perform health check
-ok, code, msPtr, errMsg := checker.HTTPCheck(svc.URL, svc.Timeout, svc.MinOK, svc.MaxOK)
+checkOK, code, msPtr, errMsg := checker.HTTPCheck(svc.URL, svc.Timeout, svc.MinOK, svc.MaxOK)
 
-// Record sample in database
+// Track consecutive failures - service is only DOWN after 2 consecutive failures
+if checkOK {
+	svc.ConsecutiveFailures = 0
+} else {
+	svc.ConsecutiveFailures++
+}
+
+// Service is considered OK if check passed OR if we haven't hit 2 consecutive failures yet
+ok := checkOK || svc.ConsecutiveFailures < 2
+
+// Record sample in database (use the adjusted ok status)
 database.InsertSample(time.Now(), svc.Key, ok, code, msPtr)
 
 // Check if service is degraded (slow response)
 degraded := ok && msPtr != nil && *msPtr > 200
 
-// Send alerts if status changed
+// Send alerts if status changed (based on adjusted ok status)
 alertMgr.CheckAndSendAlerts(svc.Key, svc.Label, ok, degraded)
 
 // Log if there was an error
 if errMsg != "" {
-log.Printf("Check %s: %s", svc.Key, errMsg)
+	log.Printf("Check %s: %s (failures: %d/2)", svc.Key, errMsg, svc.ConsecutiveFailures)
 }
 }
 }
