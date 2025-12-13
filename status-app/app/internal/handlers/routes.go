@@ -5,15 +5,17 @@ import (
 	"status/app/internal/alerts"
 	"status/app/internal/auth"
 	"status/app/internal/models"
+	"status/app/internal/resources"
 	"status/app/internal/security"
 )
 
 // SetupRoutes configures all HTTP routes and middlewares
-func SetupRoutes(authMgr *auth.Auth, alertMgr *alerts.Manager, services []*models.Service) http.Handler {
+func SetupRoutes(authMgr *auth.Auth, alertMgr *alerts.Manager, services []*models.Service, gl *resources.Client) http.Handler {
 	// Public API routes (with rate limiting)
 	api := http.NewServeMux()
 	api.HandleFunc("/api/check", HandleCheck(services))
 	api.HandleFunc("/api/metrics", HandleMetrics())
+	api.HandleFunc("/api/resources", HandleResources(gl))
 
 	// Admin API routes (with authentication)
 	authAPI := http.NewServeMux()
@@ -29,6 +31,15 @@ func SetupRoutes(authMgr *auth.Auth, alertMgr *alerts.Manager, services []*model
 			HandleGetAlertsConfig(alertMgr)(w, r)
 		} else if r.Method == http.MethodPost {
 			HandleSaveAlertsConfig(alertMgr)(w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+	authAPI.HandleFunc("/api/admin/resources/config", authMgr.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			HandleGetResourcesUIConfig()(w, r)
+		} else if r.Method == http.MethodPost {
+			HandleSaveResourcesUIConfig()(w, r)
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}

@@ -43,6 +43,15 @@ type AlertConfig struct {
 	AlertOnUp       bool   `json:"alert_on_up"`
 }
 
+// ResourcesUIConfig stores admin configuration for the Resources section/widgets
+type ResourcesUIConfig struct {
+	Enabled bool `json:"enabled"`
+	CPU     bool `json:"cpu"`
+	Memory  bool `json:"memory"`
+	Network bool `json:"network"`
+	Temp    bool `json:"temp"`
+}
+
 // ServiceStatus tracks service state for change detection
 type ServiceStatus struct {
 	Key      string

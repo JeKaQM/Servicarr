@@ -12,6 +12,7 @@ import (
 	"status/app/internal/database"
 	"status/app/internal/handlers"
 	"status/app/internal/models"
+	"status/app/internal/resources"
 	"status/app/internal/security"
 )
 
@@ -66,7 +67,8 @@ log.Printf("Scheduler started with %v interval", cfg.PollInterval)
 }
 
 // Setup HTTP routes
-mux := handlers.SetupRoutes(authMgr, alertMgr, services)
+	gl := resources.NewClient(cfg.GlancesBaseURL)
+	mux := handlers.SetupRoutes(authMgr, alertMgr, services, gl)
 
 // Wrap with security middleware
 handler := security.SecureHeaders(mux)

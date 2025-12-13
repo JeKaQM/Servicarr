@@ -151,6 +151,66 @@
     </section>
   </main>
 
+  <!-- Full-width Resources Section -->
+  <section class="card resources-section" id="card-resources">
+    <div class="row">
+      <div class="row-left">
+        <div class="res-title">
+          <strong>Resources</strong>
+          <div class="label" id="resources-host">Server usage</div>
+        </div>
+      </div>
+      <span class="pill warn" id="resources-pill">—</span>
+    </div>
+
+    <div class="resources-grid">
+      <div class="resource-tile" data-kind="cpu">
+        <div class="tile-head">
+          <div class="tile-label">🧠 CPU</div>
+          <div class="tile-kpi" id="res-cpu">—</div>
+        </div>
+        <div class="meter" aria-hidden="true"><div class="meter-fill" id="meter-cpu"></div></div>
+        <div class="tile-sub" id="res-cpu-detail">—</div>
+      </div>
+
+      <div class="resource-tile" data-kind="mem">
+        <div class="tile-head">
+          <div class="tile-label">🧷 Memory</div>
+          <div class="tile-kpi" id="res-mem">—</div>
+        </div>
+        <div class="meter" aria-hidden="true"><div class="meter-fill" id="meter-mem"></div></div>
+        <div class="tile-sub" id="res-mem-detail">—</div>
+      </div>
+
+      <div class="resource-tile" data-kind="temp">
+        <div class="tile-head">
+          <div class="tile-label">🌡 Temperature</div>
+          <div class="tile-kpi" id="res-temp">—</div>
+        </div>
+        <div class="temp-badges" aria-hidden="true">
+          <span class="temp-pill cool">↓ <span id="res-temp-min">—</span></span>
+          <span class="temp-pill hot">↑ <span id="res-temp-max">—</span></span>
+        </div>
+        <div class="tile-sub" id="res-temp-detail">Recorded min/max since start</div>
+      </div>
+
+      <div class="resource-tile" data-kind="net">
+        <div class="tile-head">
+          <div class="tile-label">📡 Network</div>
+          <div class="tile-kpi" id="res-net">—</div>
+        </div>
+        <div class="net-row">
+          <span class="net-badge rx">⬇ Rx</span>
+          <span class="net-value" id="res-net-rx">—</span>
+          <span class="net-badge tx">⬆ Tx</span>
+          <span class="net-value" id="res-net-tx">—</span>
+        </div>
+        <div class="tile-sub" id="res-net-detail">Live throughput</div>
+      </div>
+
+    </div>
+  </section>
+
   <!-- Full-width Uptime Section -->
   <section class="card uptime-section">
     <div class="row">
@@ -236,6 +296,7 @@
     <div class="admin-tabs">
       <button class="tab-btn active" data-tab="main">Main</button>
       <button class="tab-btn" data-tab="security">Security</button>
+      <button class="tab-btn" data-tab="resources">Resources</button>
       <button class="tab-btn" data-tab="alerts">Alerts</button>
     </div>
 
@@ -260,6 +321,45 @@
       </div>
       <div id="blocksList" class="blocks-list">
         <div class="muted">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Resources Tab -->
+    <div id="tab-resources" class="tab-content">
+      <h2>Resources Widgets</h2>
+      <p class="muted">Choose which resource tiles appear on the public dashboard.</p>
+
+      <div class="admin-section">
+        <h3>Visibility</h3>
+        <form id="resourcesForm">
+          <div class="form-group">
+            <label for="resourcesEnabled">
+              <input type="checkbox" id="resourcesEnabled" checked> Enable Resources section
+            </label>
+          </div>
+
+          <div class="form-group">
+            <h4>Tiles</h4>
+            <label>
+              <input type="checkbox" id="resourcesCPU" checked> 🧠 CPU
+            </label>
+            <label>
+              <input type="checkbox" id="resourcesMemory" checked> 🧷 Memory
+            </label>
+            <label>
+              <input type="checkbox" id="resourcesNetwork" checked> 📡 Network
+            </label>
+            <label>
+              <input type="checkbox" id="resourcesTemp" checked> 🌡 Temperature
+            </label>
+          </div>
+
+          <div class="ops">
+            <button type="button" id="saveResources" class="btn">Save Resources Settings</button>
+          </div>
+
+          <div id="resourcesStatus" class="status-message hidden"></div>
+        </form>
       </div>
     </div>
 

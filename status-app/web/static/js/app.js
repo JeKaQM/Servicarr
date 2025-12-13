@@ -9,6 +9,250 @@ const cls = (ok, status, degraded) => {
   return 'pill ok'; // Up = green
 };
 
+function fmtBytes(n) {
+  if (n == null || isNaN(n)) return '—';
+  const units = ['B','KB','MB','GB','TB'];
+  let v = Number(n);
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  const digits = i === 0 ? 0 : (i >= 3 ? 2 : 1);
+  return `${v.toFixed(digits)} ${units[i]}`;
+}
+
+function fmtRateBps(n) {
+  if (n == null || isNaN(n)) return '—';
+  return `${fmtBytes(n)}/s`;
+}
+
+function fmtPct(n) {
+  if (n == null || isNaN(n)) return '—';
+  return `${Number(n).toFixed(0)}%`;
+}
+
+function fmtFloat(n, digits = 2) {
+  if (n == null || isNaN(n)) return '—';
+  return Number(n).toFixed(digits);
+}
+
+function fmtTempC(n) {
+  if (n == null || isNaN(n)) return '—';
+  return `${Number(n).toFixed(0)}°C`;
+}
+
+function setResText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function setResClass(id, clsName) {
+  const el = document.getElementById(id);
+  if (el) el.className = clsName;
+}
+
+function meterClassForPct(p) {
+  if (p == null || isNaN(p)) return '';
+  const n = Number(p);
+  if (n >= 90) return 'bad';
+  if (n >= 75) return 'warn';
+  return '';
+}
+
+function setMeter(id, pct) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (pct == null || isNaN(pct)) {
+    el.style.width = '0%';
+    el.classList.remove('warn', 'bad');
+    return;
+  }
+  const p = Math.max(0, Math.min(100, Number(pct)));
+  el.style.width = `${p}%`;
+  el.classList.remove('warn', 'bad');
+  const clsName = meterClassForPct(p);
+  if (clsName) el.classList.add(clsName);
+}
+
+function applyResourcesVisibility(config) {
+  const section = document.getElementById('resources-section');
+  if (!section || !config) return;
+
+  const enabled = config.enabled !== false;
+  section.classList.toggle('hidden', !enabled);
+
+  const tiles = $$('.resource-tile', section);
+  tiles.forEach(t => {
+    const kind = t.getAttribute('data-kind');
+    let show = true;
+    if (kind === 'cpu') show = config.cpu !== false;
+    else if (kind === 'mem') show = config.memory !== false;
+    else if (kind === 'net') show = config.network !== false;
+    else if (kind === 'temp') show = config.temp !== false;
+    t.classList.toggle('hidden', !show);
+  });
+}
+
+async function loadResourcesConfig() {
+  try {
+    const cfg = await j('/api/admin/resources/config');
+    applyResourcesVisibility(cfg);
+
+    // If admin form exists (admin view), hydrate it too.
+    if ($('#resourcesEnabled')) {
+      $('#resourcesEnabled').checked = cfg.enabled !== false;
+      $('#resourcesCPU').checked = cfg.cpu !== false;
+      $('#resourcesMemory').checked = cfg.memory !== false;
+      $('#resourcesNetwork').checked = cfg.network !== false;
+      $('#resourcesTemp').checked = cfg.temp !== false;
+    }
+  } catch (err) {
+    // Not logged in (401) or server doesn't have config yet; leave default visible.
+  }
+}
+
+async function saveResourcesConfig() {
+  const statusEl = $('#resourcesStatus');
+  const btn = $('#saveResources');
+  if (!btn) return;
+
+  const config = {
+    enabled: $('#resourcesEnabled').checked,
+    cpu: $('#resourcesCPU').checked,
+    memory: $('#resourcesMemory').checked,
+    network: $('#resourcesNetwork').checked,
+    temp: $('#resourcesTemp').checked,
+  };
+
+  await handleButtonAction(
+    btn,
+    async () => {
+      await j('/api/admin/resources/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrf()
+        },
+        body: JSON.stringify(config)
+      });
+
+      // Apply immediately on the public page.
+      applyResourcesVisibility(config);
+
+      if (statusEl) {
+        statusEl.textContent = 'Resources settings saved successfully';
+        statusEl.className = 'status-message success';
+        statusEl.classList.remove('hidden');
+        setTimeout(() => statusEl.classList.add('hidden'), 3000);
+      }
+    },
+    'Resources settings saved'
+  );
+}
+
+async function refreshResources() {
+  const pill = document.getElementById('resources-pill');
+  const host = document.getElementById('resources-host');
+  const section = document.getElementById('resources-section');
+
+  // If the entire section is hidden by admin config, skip the fetch.
+  if (section && section.classList.contains('hidden')) {
+    return;
+  }
+
+  try {
+    const snap = await j('/api/resources');
+    if (host) {
+      const h = snap.host ? snap.host : 'Server usage';
+      const p = snap.platform ? ` • ${snap.platform}` : '';
+      host.textContent = `${h}${p}`;
+    }
+
+    // KPI values + meters (only update visible tiles)
+    const cpuTile = document.querySelector('#resources-section .resource-tile[data-kind="cpu"]');
+    const memTile = document.querySelector('#resources-section .resource-tile[data-kind="mem"]');
+    const tempTile = document.querySelector('#resources-section .resource-tile[data-kind="temp"]');
+    const netTile = document.querySelector('#resources-section .resource-tile[data-kind="net"]');
+
+    if (!cpuTile || !cpuTile.classList.contains('hidden')) {
+      setResText('res-cpu', fmtPct(snap.cpu_percent));
+      setMeter('meter-cpu', snap.cpu_percent);
+    }
+
+    // CPU detail: cores + breakdown when available
+    const parts = [];
+    if (snap.cpu_cores != null) parts.push(`${snap.cpu_cores} cores`);
+    if (snap.cpu_user_percent != null || snap.cpu_system_percent != null || snap.cpu_iowait_percent != null) {
+      const u = snap.cpu_user_percent != null ? `U ${fmtPct(snap.cpu_user_percent)}` : null;
+      const s = snap.cpu_system_percent != null ? `S ${fmtPct(snap.cpu_system_percent)}` : null;
+      const w = snap.cpu_iowait_percent != null ? `W ${fmtPct(snap.cpu_iowait_percent)}` : null;
+      parts.push([u,s,w].filter(Boolean).join(' • '));
+    } else if (snap.cpu_percent == null) {
+      parts.push('CPU usage unavailable');
+    } else {
+      parts.push('Total usage');
+    }
+    if (!cpuTile || !cpuTile.classList.contains('hidden')) {
+      setResText('res-cpu-detail', parts.length ? parts.join(' — ') : '—');
+    }
+
+    if (!memTile || !memTile.classList.contains('hidden')) {
+      setResText('res-mem', fmtPct(snap.mem_percent));
+      setMeter('meter-mem', snap.mem_percent);
+      setResText('res-mem-detail', (snap.mem_used_bytes != null && snap.mem_total_bytes != null)
+        ? `${fmtBytes(snap.mem_used_bytes)} / ${fmtBytes(snap.mem_total_bytes)}`
+        : '—');
+    }
+
+    // Temperature
+    if (!tempTile || !tempTile.classList.contains('hidden')) {
+      setResText('res-temp', fmtTempC(snap.temp_c));
+      setResText('res-temp-min', fmtTempC(snap.temp_min_c));
+      setResText('res-temp-max', fmtTempC(snap.temp_max_c));
+      setResText('res-temp-detail', (snap.temp_c == null)
+        ? 'Temp unavailable'
+        : 'Recorded min/max since start');
+    }
+
+    if (!netTile || !netTile.classList.contains('hidden')) {
+      setResText('res-net-rx', fmtRateBps(snap.net_rx_bytes_per_sec));
+      setResText('res-net-tx', fmtRateBps(snap.net_tx_bytes_per_sec));
+      const rx = snap.net_rx_bytes_per_sec == null ? 0 : Number(snap.net_rx_bytes_per_sec);
+      const tx = snap.net_tx_bytes_per_sec == null ? 0 : Number(snap.net_tx_bytes_per_sec);
+      const netSum = (snap.net_rx_bytes_per_sec == null && snap.net_tx_bytes_per_sec == null)
+        ? '—'
+        : fmtRateBps(rx + tx);
+      setResText('res-net', netSum);
+      setResText('res-net-detail', (snap.net_rx_bytes_per_sec == null && snap.net_tx_bytes_per_sec == null)
+        ? 'Network metrics unavailable'
+        : 'Live throughput');
+    }
+
+    // Pill status based on availability
+    if (pill) {
+      const hasAny = (snap.cpu_percent != null) || (snap.mem_percent != null) || (snap.temp_c != null) || (snap.net_rx_bytes_per_sec != null) || (snap.net_tx_bytes_per_sec != null);
+      pill.textContent = hasAny ? 'LIVE' : 'PARTIAL';
+      pill.className = hasAny ? 'pill ok' : 'pill warn';
+    }
+  } catch (e) {
+    if (pill) {
+      pill.textContent = 'UNAVAILABLE';
+      pill.className = 'pill warn';
+    }
+    if (host) host.textContent = 'Resources unavailable';
+    // reset meters
+    setMeter('meter-cpu', null);
+    setMeter('meter-mem', null);
+    setResText('res-temp', '—');
+    setResText('res-temp-min', '—');
+    setResText('res-temp-max', '—');
+    setResText('res-temp-detail', 'Temp unavailable');
+    setResText('res-net', '—');
+    setResText('res-net-detail', 'Network metrics unavailable');
+  }
+}
+
 async function j(u,opts) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -362,6 +606,9 @@ async function refresh() {
     console.error('live check failed', e);
   }
 
+  // Resources (Glances)
+  refreshResources();
+
   try {
     const metrics = await j(`/api/metrics?days=${DAYS}`);
     $('#window').textContent = `Last ${DAYS} days`;
@@ -496,7 +743,9 @@ async function whoami() {
           errorEl.classList.add('hidden');
         }
         $('#u', dlg).value = '';
-        $('#p', dlg).value = '';
+            document.dispatchEvent(new Event('loginStateChanged'));
+            // Visibility config might be admin-only; load after auth state changes.
+            loadResourcesConfig();
       }
     }
   } catch (e) {
@@ -535,7 +784,9 @@ async function ingestAll() {
 }
 
 async function resetRecent() {
-  if(!confirm('Reset incidents recorded in last 24h?')) return;
+            document.dispatchEvent(new Event('loginStateChanged'));
+            // Visibility config might be admin-only; load after auth state changes.
+            loadResourcesConfig();
   const btn = $('#resetRecentTab') || $('#resetRecent');
   await handleButtonAction(
     btn,
@@ -661,6 +912,12 @@ async function checkNowFor(card) {
 
 window.addEventListener('load', () => {
   refresh();
+  // Also trigger a quick resources fetch shortly after load so it updates fast.
+  setTimeout(() => {
+    try { refreshResources(); } catch (_) {}
+  }, 500);
+  // Load admin-configured visibility (no-op if not logged in)
+  loadResourcesConfig();
   whoami();
   setInterval(refresh, REFRESH_MS);
   
@@ -767,6 +1024,12 @@ window.addEventListener('load', () => {
   const testEmailBtn = $('#testEmail');
   if (testEmailBtn) {
     testEmailBtn.addEventListener('click', sendTestEmail);
+  }
+
+  // Resources config handlers
+  const saveResourcesBtn = $('#saveResources');
+  if (saveResourcesBtn) {
+    saveResourcesBtn.addEventListener('click', saveResourcesConfig);
   }
   
   $$('.checkNow').forEach(btn => 
