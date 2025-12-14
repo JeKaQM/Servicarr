@@ -68,6 +68,17 @@ CREATE TABLE IF NOT EXISTS alert_config (
   updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS resources_ui_config (
+	id INTEGER PRIMARY KEY CHECK (id = 1),
+	enabled INTEGER NOT NULL DEFAULT 1,
+	cpu INTEGER NOT NULL DEFAULT 1,
+	memory INTEGER NOT NULL DEFAULT 1,
+	network INTEGER NOT NULL DEFAULT 1,
+	temp INTEGER NOT NULL DEFAULT 1,
+	storage INTEGER NOT NULL DEFAULT 1,
+	updated_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS service_status_history (
   service_key TEXT PRIMARY KEY,
   ok INTEGER NOT NULL,
@@ -83,7 +94,16 @@ CREATE TABLE IF NOT EXISTS status_alerts (
   created_at TEXT NOT NULL
 );
 `)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// For existing installs: add any newly introduced columns.
+	// SQLite doesn't support IF NOT EXISTS on ADD COLUMN, so we ignore the error
+	// if the column already exists.
+	_, _ = DB.Exec(`ALTER TABLE resources_ui_config ADD COLUMN storage INTEGER NOT NULL DEFAULT 1;`)
+
+	return nil
 }
 
 // InsertSample records a service check sample
@@ -131,6 +151,35 @@ func SaveAlertConfig(config *models.AlertConfig) error {
 		config.AlertEmail, config.FromEmail, config.AlertOnDown, config.AlertOnDegraded, config.AlertOnUp,
 		config.Enabled, config.SMTPHost, config.SMTPPort, config.SMTPUser, config.SMTPPassword,
 		config.AlertEmail, config.FromEmail, config.AlertOnDown, config.AlertOnDegraded, config.AlertOnUp)
+	return err
+}
+
+// LoadResourcesUIConfig loads resources UI configuration from database
+func LoadResourcesUIConfig() (*models.ResourcesUIConfig, error) {
+	var config models.ResourcesUIConfig
+	err := DB.QueryRow(`SELECT enabled, cpu, memory, network, temp, storage
+		FROM resources_ui_config WHERE id = 1`).Scan(
+		&config.Enabled, &config.CPU, &config.Memory, &config.Network, &config.Temp, &config.Storage,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+// SaveResourcesUIConfig saves resources UI configuration to database
+func SaveResourcesUIConfig(config *models.ResourcesUIConfig) error {
+	_, err := DB.Exec(`INSERT INTO resources_ui_config (id, enabled, cpu, memory, network, temp, storage, updated_at)
+		VALUES (1, ?, ?, ?, ?, ?, ?, datetime('now'))
+		ON CONFLICT(id) DO UPDATE SET
+			enabled=?, cpu=?, memory=?, network=?, temp=?, storage=?, updated_at=datetime('now')`,
+		config.Enabled, config.CPU, config.Memory, config.Network, config.Temp, config.Storage,
+		config.Enabled, config.CPU, config.Memory, config.Network, config.Temp, config.Storage,
+	)
 	return err
 }
 

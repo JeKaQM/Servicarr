@@ -146,7 +146,7 @@ func CreateHTMLEmail(subject, statusType, serviceName, serviceKey, message, stat
 
 	color := statusColors[statusType]
 	statusText := statusTexts[statusType]
-	
+
 	// Default URL if not set
 	if statusPageURL == "" {
 		statusPageURL = "#"

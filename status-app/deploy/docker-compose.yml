@@ -1,6 +1,9 @@
 services:
   status:
-    image: jekaq/statusapp:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: jekaq/statusapp
     container_name: statusapp
     env_file:
       - ../.env

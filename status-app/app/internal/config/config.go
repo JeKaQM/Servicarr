@@ -29,6 +29,9 @@ type Config struct {
 
 	// Services (loaded from env)
 	ServiceConfigs []ServiceConfig
+
+	// Resources (Glances)
+	GlancesBaseURL string
 }
 
 // ServiceConfig holds configuration for a single service
@@ -54,6 +57,7 @@ func Load() (*Config, error) {
 		EnableScheduler: strings.ToLower(getenv("ENABLE_SCHEDULER", "true")) == "true",
 		PollInterval:    envDurSecs("POLL_SECONDS", 60),
 		StatusPageURL:   getenv("STATUS_PAGE_URL", ""),
+		GlancesBaseURL:  strings.TrimSuffix(getenv("GLANCES_BASE_URL", "http://10.0.0.2:61208/api/4"), "/"),
 	}
 
 	// Load auth password/hash

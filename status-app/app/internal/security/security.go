@@ -46,7 +46,7 @@ func RateLimit(next http.Handler) http.Handler {
 			if strings.HasPrefix(r.URL.Path, "/api/") {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":      "access_blocked",
 					"message":    "Your access has been temporarily blocked due to excessive failed login attempts",
 					"expires_at": block.ExpiresAt,
@@ -95,7 +95,7 @@ func CheckIPBlock(next http.Handler) http.Handler {
 			if strings.HasPrefix(r.URL.Path, "/api/") {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":      "access_blocked",
 					"message":    "Your access has been temporarily blocked due to excessive failed login attempts",
 					"expires_at": block.ExpiresAt,
@@ -156,7 +156,7 @@ func IsIPBlocked(ip string) bool {
 // LogFailedLoginAttempt records a failed login attempt and blocks if threshold reached
 func LogFailedLoginAttempt(ip string) {
 	// First, delete any expired blocks for this IP
-	database.DB.Exec(`DELETE FROM ip_blocks WHERE ip_address = ? AND expires_at <= datetime('now')`, ip)
+	_, _ = database.DB.Exec(`DELETE FROM ip_blocks WHERE ip_address = ? AND expires_at <= datetime('now')`, ip)
 
 	// Check if there's an existing non-expired record
 	var attempts int
