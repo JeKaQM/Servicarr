@@ -25,12 +25,12 @@ type Snapshot struct {
 
 	UptimeSeconds *float64 `json:"uptime_seconds,omitempty"`
 
-	CPUPercent *float64 `json:"cpu_percent,omitempty"`
-	CPUUserPercent   *float64 `json:"cpu_user_percent,omitempty"`
-	CPUSystemPercent *float64 `json:"cpu_system_percent,omitempty"`
-	CPUIOWaitPercent *float64 `json:"cpu_iowait_percent,omitempty"`
-	CPUIdlePercent   *float64 `json:"cpu_idle_percent,omitempty"`
-	CPUCores         *uint64  `json:"cpu_cores,omitempty"`
+	CPUPercent        *float64  `json:"cpu_percent,omitempty"`
+	CPUUserPercent    *float64  `json:"cpu_user_percent,omitempty"`
+	CPUSystemPercent  *float64  `json:"cpu_system_percent,omitempty"`
+	CPUIOWaitPercent  *float64  `json:"cpu_iowait_percent,omitempty"`
+	CPUIdlePercent    *float64  `json:"cpu_idle_percent,omitempty"`
+	CPUCores          *uint64   `json:"cpu_cores,omitempty"`
 	CPUPerCorePercent []float64 `json:"cpu_per_core_percent,omitempty"`
 
 	Load1  *float64 `json:"load_1,omitempty"`
@@ -49,7 +49,7 @@ type Snapshot struct {
 	ProcRunning  *uint64 `json:"proc_running,omitempty"`
 	ProcSleeping *uint64 `json:"proc_sleeping,omitempty"`
 
-	TempC *float64 `json:"temp_c,omitempty"`
+	TempC    *float64 `json:"temp_c,omitempty"`
 	TempMinC *float64 `json:"temp_min_c,omitempty"`
 	TempMaxC *float64 `json:"temp_max_c,omitempty"`
 
@@ -59,10 +59,10 @@ type Snapshot struct {
 	DiskReadBytesPerSec  *float64 `json:"disk_read_bytes_per_sec,omitempty"`
 	DiskWriteBytesPerSec *float64 `json:"disk_write_bytes_per_sec,omitempty"`
 
-	FSTotalBytes    *uint64  `json:"fs_total_bytes,omitempty"`
-	FSUsedBytes     *uint64  `json:"fs_used_bytes,omitempty"`
-	FSFreeBytes     *uint64  `json:"fs_free_bytes,omitempty"`
-	FSUsedPercent   *float64 `json:"fs_used_percent,omitempty"`
+	FSTotalBytes  *uint64  `json:"fs_total_bytes,omitempty"`
+	FSUsedBytes   *uint64  `json:"fs_used_bytes,omitempty"`
+	FSFreeBytes   *uint64  `json:"fs_free_bytes,omitempty"`
+	FSUsedPercent *float64 `json:"fs_used_percent,omitempty"`
 }
 
 type Client struct {
@@ -124,29 +124,29 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 type glancesCPU struct {
 	Total interface{} `json:"total"`
 	// Some Glances builds expose "total" as a number; we keep it loose.
-	User   interface{} `json:"user"`
-	System interface{} `json:"system"`
-	IOWait interface{} `json:"iowait"`
-	Idle   interface{} `json:"idle"`
+	User    interface{} `json:"user"`
+	System  interface{} `json:"system"`
+	IOWait  interface{} `json:"iowait"`
+	Idle    interface{} `json:"idle"`
 	CPUCore interface{} `json:"cpucore"`
 }
 
 type glancesLoad struct {
-	Min1  interface{} `json:"min1"`
-	Min5  interface{} `json:"min5"`
-	Min15 interface{} `json:"min15"`
+	Min1    interface{} `json:"min1"`
+	Min5    interface{} `json:"min5"`
+	Min15   interface{} `json:"min15"`
 	CPUCore interface{} `json:"cpucore"`
 }
 
 type glancesMem struct {
-	Total interface{} `json:"total"`
-	Used  interface{} `json:"used"`
+	Total   interface{} `json:"total"`
+	Used    interface{} `json:"used"`
 	Percent interface{} `json:"percent"`
 }
 
 type glancesSwap struct {
-	Total interface{} `json:"total"`
-	Used  interface{} `json:"used"`
+	Total   interface{} `json:"total"`
+	Used    interface{} `json:"used"`
 	Percent interface{} `json:"percent"`
 }
 
@@ -189,8 +189,8 @@ type glancesPerCPU struct {
 }
 
 type glancesDiskIO struct {
-	DiskName            interface{} `json:"disk_name"`
-	ReadBytesRatePerSec interface{} `json:"read_bytes_rate_per_sec"`
+	DiskName             interface{} `json:"disk_name"`
+	ReadBytesRatePerSec  interface{} `json:"read_bytes_rate_per_sec"`
 	WriteBytesRatePerSec interface{} `json:"write_bytes_rate_per_sec"`
 }
 
@@ -509,7 +509,11 @@ func (c *Client) FetchSnapshot(ctx context.Context) (Snapshot, error) {
 			if idxPtr == nil || valPtr == nil {
 				continue
 			}
-			idx := int(*idxPtr)
+			// G115: bounds check to prevent integer overflow
+			if *idxPtr > uint64(^uint(0)>>1) {
+				continue
+			}
+			idx := int(*idxPtr) // #nosec G115 -- bounds checked above
 			if idx < 0 {
 				continue
 			}

@@ -23,14 +23,14 @@ func HandleIngestNow(services []*models.Service) http.HandlerFunc {
 				continue
 			}
 			checkOK, code, ms, _ := checker.HTTPCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
-			
+
 			// Update consecutive failure count
 			if checkOK {
 				s.ConsecutiveFailures = 0
 			} else {
 				s.ConsecutiveFailures++
 			}
-			
+
 			// Service is only DOWN after 2 consecutive failures
 			ok := checkOK || s.ConsecutiveFailures < 2
 			database.InsertSample(now, s.Key, ok, code, ms)
@@ -77,14 +77,14 @@ func HandleAdminCheck(services []*models.Service) http.HandlerFunc {
 
 		now := time.Now().UTC()
 		checkOK, code, ms, _ := checker.HTTPCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
-		
+
 		// Update consecutive failure count
 		if checkOK {
 			s.ConsecutiveFailures = 0
 		} else {
 			s.ConsecutiveFailures++
 		}
-		
+
 		// Service is only DOWN after 2 consecutive failures
 		ok := checkOK || s.ConsecutiveFailures < 2
 		database.InsertSample(now, s.Key, ok, code, ms)
@@ -180,7 +180,7 @@ func HandleClearAllBlocks() http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"message": fmt.Sprintf("Successfully cleared %d IP blocks", affected),
 			"cleared": affected,
 		})

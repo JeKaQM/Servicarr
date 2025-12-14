@@ -32,14 +32,14 @@ func HandleCheck(services []*models.Service) http.HandlerFunc {
 				continue
 			}
 			checkOK, code, ms, _ := checker.HTTPCheck(s.URL, s.Timeout, s.MinOK, s.MaxOK)
-			
+
 			// Update consecutive failure count
 			if checkOK {
 				s.ConsecutiveFailures = 0
 			} else {
 				s.ConsecutiveFailures++
 			}
-			
+
 			// Service is only DOWN after 2 consecutive failures
 			ok := checkOK || s.ConsecutiveFailures < 2
 			degraded := ok && ms != nil && *ms > 200
@@ -63,7 +63,7 @@ func HandleMetrics() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		days := 7
 		hours := 0
-		
+
 		// Support both days and hours parameters
 		if q := r.URL.Query().Get("days"); q != "" {
 			if n, err := strconv.Atoi(q); err == nil {
@@ -90,11 +90,11 @@ func HandleMetrics() http.HandlerFunc {
 		} else {
 			hours = 24
 		}
-		
+
 		var since string
 		var groupBy string
 		var timeField string
-		
+
 		if days > 0 {
 			// Use daily aggregation
 			since = time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour).Format(time.RFC3339)
@@ -107,6 +107,7 @@ func HandleMetrics() http.HandlerFunc {
 			timeField = "hour"
 		}
 
+		// #nosec G201 -- groupBy is derived from fixed string constants, not user input
 		query := fmt.Sprintf(`
 WITH aggregated AS (
   SELECT service_key,
@@ -180,7 +181,7 @@ FROM aggregated ORDER BY time_bin ASC`, groupBy)
 			"overall": overall,
 			"downs":   downs,
 		}
-		
+
 		if days > 0 {
 			response["window_days"] = days
 		} else {

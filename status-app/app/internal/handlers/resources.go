@@ -19,8 +19,8 @@ func HandleResources(gl *resources.Client) http.HandlerFunc {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadGateway)
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":   "glances_unavailable",
-				"message": err.Error(),
+				"error":    "glances_unavailable",
+				"message":  err.Error(),
 				"taken_at": time.Now().UTC(),
 			})
 			return
