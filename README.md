@@ -140,6 +140,18 @@ go test ./...
 - Check you're using correct admin password
 - If IP blocked, wait 24 hours or restart the app
 
+## Contributing
+
+This repository uses GitHub Actions for continuous integration. Pull requests must pass all status checks before merging:
+
+- Go code formatting and linting
+- Build validation
+- Test execution
+- Docker image build
+- Security scanning
+
+See [.github/workflows/README.md](.github/workflows/README.md) for details on the CI/CD pipeline.
+
 ## License
 
 MIT
