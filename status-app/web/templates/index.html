@@ -154,8 +154,8 @@
     </section>
   </main>
 
-  <!-- Full-width Resources Section -->
-  <section class="card resources-section" id="card-resources">
+  <!-- Full-width Resources Section - start hidden, JS shows based on config -->
+  <section class="card resources-section hidden" id="card-resources">
     <div class="row">
       <div class="row-left">
         <div class="res-title">
@@ -166,7 +166,7 @@
     </div>
 
     <div class="resources-grid">
-      <div class="resource-tile" data-kind="cpu">
+      <div class="resource-tile hidden" data-kind="cpu">
         <div class="tile-head">
           <div class="tile-label">🖥️ CPU</div>
           <div class="tile-kpi" id="res-cpu">—</div>
@@ -175,7 +175,7 @@
         <div class="tile-sub" id="res-cpu-detail">—</div>
       </div>
 
-      <div class="resource-tile" data-kind="mem">
+      <div class="resource-tile hidden" data-kind="mem">
         <div class="tile-head">
           <div class="tile-label">💾 RAM</div>
           <div class="tile-kpi" id="res-mem">—</div>
@@ -184,7 +184,7 @@
         <div class="tile-sub" id="res-mem-detail">—</div>
       </div>
 
-      <div class="resource-tile" data-kind="temp">
+      <div class="resource-tile hidden" data-kind="temp">
         <div class="tile-head">
           <div class="tile-label">🌡 System Temp</div>
           <div class="tile-kpi" id="res-temp">—</div>
@@ -202,7 +202,7 @@
         <div class="tile-sub" id="res-temp-detail"></div>
       </div>
 
-      <div class="resource-tile" data-kind="net">
+      <div class="resource-tile hidden" data-kind="net">
         <div class="tile-head">
           <div class="tile-label">📡 Network</div>
           <div class="tile-kpi" id="res-net">—</div>
@@ -222,7 +222,7 @@
         <div class="tile-sub" id="res-net-detail">Live throughput</div>
       </div>
 
-      <div class="resource-tile" data-kind="storage">
+      <div class="resource-tile hidden" data-kind="storage">
         <div class="tile-head">
           <div class="tile-label">🗄 Storage</div>
           <div class="tile-kpi" id="res-storage">—</div>
