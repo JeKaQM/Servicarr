@@ -1,5 +1,7 @@
 const REFRESH_MS = 15000;
 let DAYS = 30;
+let resourcesConfigLoaded = false; // Track if config has been loaded
+let resourcesConfig = null; // Cache the config
 const $ = (s,r=document) => r.querySelector(s);
 const $$ = (s,r=document) => Array.from(r.querySelectorAll(s));
 const fmtMs = ms => ms==null ? '—' : ms+' ms';
@@ -79,6 +81,9 @@ function applyResourcesVisibility(config) {
   const section = document.getElementById('card-resources');
   if (!section || !config) return;
 
+  // Cache the config for use elsewhere
+  resourcesConfig = config;
+
   const enabled = config.enabled !== false;
   section.classList.toggle('hidden', !enabled);
 
@@ -101,6 +106,7 @@ async function loadResourcesConfig() {
     // (Admin endpoint is still used for editing.)
     const cfg = await j('/api/resources/config');
     applyResourcesVisibility(cfg);
+    resourcesConfigLoaded = true;
 
     // If admin form exists (admin view), hydrate it too.
     if ($('#resourcesEnabled')) {
@@ -117,6 +123,7 @@ async function loadResourcesConfig() {
     try {
       const cfg = await j('/api/admin/resources/config');
       applyResourcesVisibility(cfg);
+      resourcesConfigLoaded = true;
       if ($('#resourcesEnabled')) {
         $('#resourcesEnabled').checked = cfg.enabled !== false;
         $('#resourcesCPU').checked = cfg.cpu !== false;
@@ -126,7 +133,8 @@ async function loadResourcesConfig() {
         if ($('#resourcesStorage')) $('#resourcesStorage').checked = cfg.storage !== false;
       }
     } catch (_) {
-      // Leave defaults.
+      // Leave defaults - but mark as loaded so resources can proceed
+      resourcesConfigLoaded = true;
     }
   }
 }
@@ -174,6 +182,12 @@ async function saveResourcesConfig() {
 async function refreshResources() {
   const pill = document.getElementById('resources-pill');
   const section = document.getElementById('card-resources');
+
+  // Wait for config to be loaded before fetching resources data.
+  // This prevents showing hidden tiles before visibility is applied.
+  if (!resourcesConfigLoaded) {
+    return;
+  }
 
   // If the entire section is hidden by admin config, skip the fetch.
   if (section && section.classList.contains('hidden')) {
@@ -954,14 +968,12 @@ async function checkNowFor(card) {
   );
 }
 
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+  // IMPORTANT: Load resources config FIRST before any refresh calls.
+  // This prevents hidden tiles from briefly appearing due to race conditions.
+  await loadResourcesConfig();
+  
   refresh();
-  // Also trigger a quick resources fetch shortly after load so it updates fast.
-  setTimeout(() => {
-    try { refreshResources(); } catch (_) {}
-  }, 500);
-  // Load admin-configured visibility (no-op if not logged in)
-  loadResourcesConfig();
   whoami();
   setInterval(refresh, REFRESH_MS);
   
