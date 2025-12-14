@@ -27,14 +27,6 @@ function fmtRateBps(n) {
   return `${fmtBytes(n)}/s`;
 }
 
-function fmtStorage(used, total, free, pct) {
-  if (used == null || total == null || isNaN(used) || isNaN(total) || Number(total) <= 0) return '—';
-  const left = `${fmtBytes(used)} / ${fmtBytes(total)}`;
-  const p = (pct == null || isNaN(pct)) ? '' : ` (${Number(pct).toFixed(0)}%)`;
-  const f = (free == null || isNaN(free)) ? '' : ` • Free ${fmtBytes(free)}`;
-  return `${left}${p}${f}`;
-}
-
 function fmtPct(n) {
   if (n == null || isNaN(n)) return '—';
   return `${Number(n).toFixed(0)}%`;
@@ -192,11 +184,11 @@ async function refreshResources() {
     const snap = await j('/api/resources');
 
     // KPI values + meters (only update visible tiles)
-  const cpuTile = document.querySelector('#card-resources .resource-tile[data-kind="cpu"]');
-  const memTile = document.querySelector('#card-resources .resource-tile[data-kind="mem"]');
-  const tempTile = document.querySelector('#card-resources .resource-tile[data-kind="temp"]');
-  const netTile = document.querySelector('#card-resources .resource-tile[data-kind="net"]');
-  const storageTile = document.querySelector('#card-resources .resource-tile[data-kind="storage"]');
+    const cpuTile = document.querySelector('#card-resources .resource-tile[data-kind="cpu"]');
+    const memTile = document.querySelector('#card-resources .resource-tile[data-kind="mem"]');
+    const tempTile = document.querySelector('#card-resources .resource-tile[data-kind="temp"]');
+    const netTile = document.querySelector('#card-resources .resource-tile[data-kind="net"]');
+    const storageTile = document.querySelector('#card-resources .resource-tile[data-kind="storage"]');
 
     if (!cpuTile || !cpuTile.classList.contains('hidden')) {
       setResText('res-cpu', fmtPct(snap.cpu_percent));
@@ -288,7 +280,7 @@ async function refreshResources() {
     setResText('res-temp', '—');
     setResText('res-temp-min', '—');
     setResText('res-temp-max', '—');
-  setResText('res-temp-detail', 'Temp unavailable');
+    setResText('res-temp-detail', 'Temp unavailable');
     setResText('res-net', '—');
     setResText('res-net-detail', 'Network metrics unavailable');
     setResText('res-io-rd', '—');
