@@ -27,6 +27,14 @@ function fmtRateBps(n) {
   return `${fmtBytes(n)}/s`;
 }
 
+function fmtStorage(used, total, free, pct) {
+  if (used == null || total == null || isNaN(used) || isNaN(total) || Number(total) <= 0) return '—';
+  const left = `${fmtBytes(used)} / ${fmtBytes(total)}`;
+  const p = (pct == null || isNaN(pct)) ? '' : ` (${Number(pct).toFixed(0)}%)`;
+  const f = (free == null || isNaN(free)) ? '' : ` • Free ${fmtBytes(free)}`;
+  return `${left}${p}${f}`;
+}
+
 function fmtPct(n) {
   if (n == null || isNaN(n)) return '—';
   return `${Number(n).toFixed(0)}%`;
@@ -76,7 +84,7 @@ function setMeter(id, pct) {
 }
 
 function applyResourcesVisibility(config) {
-  const section = document.getElementById('resources-section');
+  const section = document.getElementById('card-resources');
   if (!section || !config) return;
 
   const enabled = config.enabled !== false;
@@ -90,13 +98,16 @@ function applyResourcesVisibility(config) {
     else if (kind === 'mem') show = config.memory !== false;
     else if (kind === 'net') show = config.network !== false;
     else if (kind === 'temp') show = config.temp !== false;
+    else if (kind === 'storage') show = config.storage !== false;
     t.classList.toggle('hidden', !show);
   });
 }
 
 async function loadResourcesConfig() {
   try {
-    const cfg = await j('/api/admin/resources/config');
+    // Public endpoint so the dashboard can respect admin settings without being logged in.
+    // (Admin endpoint is still used for editing.)
+    const cfg = await j('/api/resources/config');
     applyResourcesVisibility(cfg);
 
     // If admin form exists (admin view), hydrate it too.
@@ -106,9 +117,25 @@ async function loadResourcesConfig() {
       $('#resourcesMemory').checked = cfg.memory !== false;
       $('#resourcesNetwork').checked = cfg.network !== false;
       $('#resourcesTemp').checked = cfg.temp !== false;
+      if ($('#resourcesStorage')) $('#resourcesStorage').checked = cfg.storage !== false;
     }
   } catch (err) {
-    // Not logged in (401) or server doesn't have config yet; leave default visible.
+    // If the public endpoint isn't available for some reason, try the admin endpoint
+    // (will work when logged in).
+    try {
+      const cfg = await j('/api/admin/resources/config');
+      applyResourcesVisibility(cfg);
+      if ($('#resourcesEnabled')) {
+        $('#resourcesEnabled').checked = cfg.enabled !== false;
+        $('#resourcesCPU').checked = cfg.cpu !== false;
+        $('#resourcesMemory').checked = cfg.memory !== false;
+        $('#resourcesNetwork').checked = cfg.network !== false;
+        $('#resourcesTemp').checked = cfg.temp !== false;
+        if ($('#resourcesStorage')) $('#resourcesStorage').checked = cfg.storage !== false;
+      }
+    } catch (_) {
+      // Leave defaults.
+    }
   }
 }
 
@@ -123,6 +150,7 @@ async function saveResourcesConfig() {
     memory: $('#resourcesMemory').checked,
     network: $('#resourcesNetwork').checked,
     temp: $('#resourcesTemp').checked,
+    storage: $('#resourcesStorage') ? $('#resourcesStorage').checked : true,
   };
 
   await handleButtonAction(
@@ -153,8 +181,7 @@ async function saveResourcesConfig() {
 
 async function refreshResources() {
   const pill = document.getElementById('resources-pill');
-  const host = document.getElementById('resources-host');
-  const section = document.getElementById('resources-section');
+  const section = document.getElementById('card-resources');
 
   // If the entire section is hidden by admin config, skip the fetch.
   if (section && section.classList.contains('hidden')) {
@@ -163,17 +190,13 @@ async function refreshResources() {
 
   try {
     const snap = await j('/api/resources');
-    if (host) {
-      const h = snap.host ? snap.host : 'Server usage';
-      const p = snap.platform ? ` • ${snap.platform}` : '';
-      host.textContent = `${h}${p}`;
-    }
 
     // KPI values + meters (only update visible tiles)
-    const cpuTile = document.querySelector('#resources-section .resource-tile[data-kind="cpu"]');
-    const memTile = document.querySelector('#resources-section .resource-tile[data-kind="mem"]');
-    const tempTile = document.querySelector('#resources-section .resource-tile[data-kind="temp"]');
-    const netTile = document.querySelector('#resources-section .resource-tile[data-kind="net"]');
+  const cpuTile = document.querySelector('#card-resources .resource-tile[data-kind="cpu"]');
+  const memTile = document.querySelector('#card-resources .resource-tile[data-kind="mem"]');
+  const tempTile = document.querySelector('#card-resources .resource-tile[data-kind="temp"]');
+  const netTile = document.querySelector('#card-resources .resource-tile[data-kind="net"]');
+  const storageTile = document.querySelector('#card-resources .resource-tile[data-kind="storage"]');
 
     if (!cpuTile || !cpuTile.classList.contains('hidden')) {
       setResText('res-cpu', fmtPct(snap.cpu_percent));
@@ -181,20 +204,23 @@ async function refreshResources() {
     }
 
     // CPU detail: cores + breakdown when available
-    const parts = [];
-    if (snap.cpu_cores != null) parts.push(`${snap.cpu_cores} cores`);
-    if (snap.cpu_user_percent != null || snap.cpu_system_percent != null || snap.cpu_iowait_percent != null) {
-      const u = snap.cpu_user_percent != null ? `U ${fmtPct(snap.cpu_user_percent)}` : null;
-      const s = snap.cpu_system_percent != null ? `S ${fmtPct(snap.cpu_system_percent)}` : null;
-      const w = snap.cpu_iowait_percent != null ? `W ${fmtPct(snap.cpu_iowait_percent)}` : null;
-      parts.push([u,s,w].filter(Boolean).join(' • '));
+    let cpuDetail = '—';
+    if (Array.isArray(snap.cpu_per_core_percent) && snap.cpu_per_core_percent.length) {
+      // Example: C0 12% • C1 6% • C2 18% ...
+      cpuDetail = snap.cpu_per_core_percent
+        .map((v, i) => `C${i} ${fmtPct(v)}`)
+        .join(' • ');
     } else if (snap.cpu_percent == null) {
-      parts.push('CPU usage unavailable');
+      cpuDetail = 'CPU usage unavailable';
     } else {
-      parts.push('Total usage');
+      // fallback: show cores + avg/max when we have at least an average
+      const bits = [];
+      if (snap.cpu_cores != null) bits.push(`${snap.cpu_cores} cores`);
+      bits.push(`Avg ${fmtPct(snap.cpu_percent)}`);
+      cpuDetail = bits.join(' — ');
     }
     if (!cpuTile || !cpuTile.classList.contains('hidden')) {
-      setResText('res-cpu-detail', parts.length ? parts.join(' — ') : '—');
+      setResText('res-cpu-detail', cpuDetail);
     }
 
     if (!memTile || !memTile.classList.contains('hidden')) {
@@ -212,7 +238,7 @@ async function refreshResources() {
       setResText('res-temp-max', fmtTempC(snap.temp_max_c));
       setResText('res-temp-detail', (snap.temp_c == null)
         ? 'Temp unavailable'
-        : 'Recorded min/max since start');
+        : '');
     }
 
     if (!netTile || !netTile.classList.contains('hidden')) {
@@ -227,6 +253,22 @@ async function refreshResources() {
       setResText('res-net-detail', (snap.net_rx_bytes_per_sec == null && snap.net_tx_bytes_per_sec == null)
         ? 'Network metrics unavailable'
         : 'Live throughput');
+
+      // Disk I/O (optional)
+      setResText('res-io-rd', fmtRateBps(snap.disk_read_bytes_per_sec));
+      setResText('res-io-wr', fmtRateBps(snap.disk_write_bytes_per_sec));
+    }
+
+    // Storage tile (optional)
+    if (!storageTile || !storageTile.classList.contains('hidden')) {
+      setResText('res-storage', fmtPct(snap.fs_used_percent));
+      setMeter('meter-storage', snap.fs_used_percent);
+      setResText('res-storage-detail', (snap.fs_used_bytes != null && snap.fs_total_bytes != null)
+        ? `${fmtBytes(snap.fs_used_bytes)} / ${fmtBytes(snap.fs_total_bytes)}`
+        : 'Storage metrics unavailable');
+
+      setResText('res-storage-used', (snap.fs_used_bytes != null) ? fmtBytes(snap.fs_used_bytes) : '—');
+      setResText('res-storage-free', (snap.fs_free_bytes != null) ? fmtBytes(snap.fs_free_bytes) : '—');
     }
 
     // Pill status based on availability
@@ -240,16 +282,23 @@ async function refreshResources() {
       pill.textContent = 'UNAVAILABLE';
       pill.className = 'pill warn';
     }
-    if (host) host.textContent = 'Resources unavailable';
     // reset meters
     setMeter('meter-cpu', null);
     setMeter('meter-mem', null);
     setResText('res-temp', '—');
     setResText('res-temp-min', '—');
     setResText('res-temp-max', '—');
-    setResText('res-temp-detail', 'Temp unavailable');
+  setResText('res-temp-detail', 'Temp unavailable');
     setResText('res-net', '—');
     setResText('res-net-detail', 'Network metrics unavailable');
+    setResText('res-io-rd', '—');
+    setResText('res-io-wr', '—');
+
+    setMeter('meter-storage', null);
+    setResText('res-storage', '—');
+    setResText('res-storage-detail', 'Storage metrics unavailable');
+    setResText('res-storage-used', '—');
+    setResText('res-storage-free', '—');
   }
 }
 
@@ -729,6 +778,7 @@ async function whoami() {
       $$('.adminRow').forEach(e => e.classList.remove('hidden'));
       document.dispatchEvent(loginStateChanged);
       loadAlertsConfig();
+      loadResourcesConfig();
     } else {
       $('#welcome').textContent = 'Public view';
       $('#loginBtn').classList.remove('hidden');
@@ -750,9 +800,7 @@ async function whoami() {
           errorEl.classList.add('hidden');
         }
         $('#u', dlg).value = '';
-            document.dispatchEvent(new Event('loginStateChanged'));
-            // Visibility config might be admin-only; load after auth state changes.
-            loadResourcesConfig();
+        $('#p', dlg).value = '';
       }
     }
   } catch (e) {
@@ -791,9 +839,6 @@ async function ingestAll() {
 }
 
 async function resetRecent() {
-            document.dispatchEvent(new Event('loginStateChanged'));
-            // Visibility config might be admin-only; load after auth state changes.
-            loadResourcesConfig();
   const btn = $('#resetRecentTab') || $('#resetRecent');
   await handleButtonAction(
     btn,

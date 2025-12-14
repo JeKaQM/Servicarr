@@ -16,6 +16,7 @@ func SetupRoutes(authMgr *auth.Auth, alertMgr *alerts.Manager, services []*model
 	api.HandleFunc("/api/check", HandleCheck(services))
 	api.HandleFunc("/api/metrics", HandleMetrics())
 	api.HandleFunc("/api/resources", HandleResources(gl))
+	api.HandleFunc("/api/resources/config", HandleGetResourcesUIConfig())
 
 	// Admin API routes (with authentication)
 	authAPI := http.NewServeMux()

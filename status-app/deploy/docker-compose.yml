@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: statusapp-local:dev
+    image: jekaq/statusapp
     container_name: statusapp
     env_file:
       - ../.env

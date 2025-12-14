@@ -14,6 +14,7 @@ func defaultResourcesUIConfig() *models.ResourcesUIConfig {
 		Memory:  true,
 		Network: true,
 		Temp:    true,
+		Storage: true,
 	}
 }
 

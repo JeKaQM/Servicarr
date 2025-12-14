@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,6 +31,7 @@ type Snapshot struct {
 	CPUIOWaitPercent *float64 `json:"cpu_iowait_percent,omitempty"`
 	CPUIdlePercent   *float64 `json:"cpu_idle_percent,omitempty"`
 	CPUCores         *uint64  `json:"cpu_cores,omitempty"`
+	CPUPerCorePercent []float64 `json:"cpu_per_core_percent,omitempty"`
 
 	Load1  *float64 `json:"load_1,omitempty"`
 	Load5  *float64 `json:"load_5,omitempty"`
@@ -53,6 +55,14 @@ type Snapshot struct {
 
 	NetRxBytesPerSec *float64 `json:"net_rx_bytes_per_sec,omitempty"`
 	NetTxBytesPerSec *float64 `json:"net_tx_bytes_per_sec,omitempty"`
+
+	DiskReadBytesPerSec  *float64 `json:"disk_read_bytes_per_sec,omitempty"`
+	DiskWriteBytesPerSec *float64 `json:"disk_write_bytes_per_sec,omitempty"`
+
+	FSTotalBytes    *uint64  `json:"fs_total_bytes,omitempty"`
+	FSUsedBytes     *uint64  `json:"fs_used_bytes,omitempty"`
+	FSFreeBytes     *uint64  `json:"fs_free_bytes,omitempty"`
+	FSUsedPercent   *float64 `json:"fs_used_percent,omitempty"`
 }
 
 type Client struct {
@@ -173,6 +183,28 @@ type glancesNet struct {
 	TxRate interface{} `json:"tx_rate"`
 }
 
+type glancesPerCPU struct {
+	CPUNumber interface{} `json:"cpu_number"`
+	Total     interface{} `json:"total"`
+}
+
+type glancesDiskIO struct {
+	DiskName            interface{} `json:"disk_name"`
+	ReadBytesRatePerSec interface{} `json:"read_bytes_rate_per_sec"`
+	WriteBytesRatePerSec interface{} `json:"write_bytes_rate_per_sec"`
+}
+
+type glancesFS struct {
+	DeviceName interface{} `json:"device_name"`
+	FSType     interface{} `json:"fs_type"`
+	MountPoint interface{} `json:"mnt_point"`
+	Options    interface{} `json:"options"`
+	Size       interface{} `json:"size"`
+	Used       interface{} `json:"used"`
+	Free       interface{} `json:"free"`
+	Percent    interface{} `json:"percent"`
+}
+
 func asFloatPtr(v interface{}) *float64 {
 	switch x := v.(type) {
 	case nil:
@@ -277,6 +309,9 @@ func (c *Client) FetchSnapshot(ctx context.Context) (Snapshot, error) {
 	var pc glancesProcessCount
 	var sensors []glancesSensor
 	var nets []glancesNet
+	var percpu []glancesPerCPU
+	var diskio []glancesDiskIO
+	var fs []glancesFS
 
 	// Best-effort: ignore individual errors but return a combined error if too many fail.
 	errCount := 0
@@ -304,6 +339,15 @@ func (c *Client) FetchSnapshot(ctx context.Context) (Snapshot, error) {
 	}
 	if err := c.getJSON(ctx, "/network", &nets); err != nil {
 		errCount++
+	}
+	if err := c.getJSON(ctx, "/percpu", &percpu); err != nil {
+		// Optional in some builds
+	}
+	if err := c.getJSON(ctx, "/diskio", &diskio); err != nil {
+		// Optional in some builds
+	}
+	if err := c.getJSON(ctx, "/fs", &fs); err != nil {
+		// Optional in some builds
 	}
 
 	// If everything failed, surface an error.
@@ -452,6 +496,114 @@ func (c *Client) FetchSnapshot(ctx context.Context) (Snapshot, error) {
 	if hasRate {
 		s.NetRxBytesPerSec = &rxRate
 		s.NetTxBytesPerSec = &txRate
+	}
+
+	// per-cpu totals: order by cpu_number and export totals
+	if len(percpu) > 0 {
+		// We’ll store by cpu index, compacted into a slice.
+		maxIdx := -1
+		vals := map[int]float64{}
+		for _, p := range percpu {
+			idxPtr := asUint64Ptr(p.CPUNumber)
+			valPtr := asFloatPtr(p.Total)
+			if idxPtr == nil || valPtr == nil {
+				continue
+			}
+			idx := int(*idxPtr)
+			if idx < 0 {
+				continue
+			}
+			vals[idx] = *valPtr
+			if idx > maxIdx {
+				maxIdx = idx
+			}
+		}
+		if maxIdx >= 0 {
+			out := make([]float64, maxIdx+1)
+			seen := false
+			for i := 0; i <= maxIdx; i++ {
+				if v, ok := vals[i]; ok {
+					out[i] = v
+					seen = true
+				}
+			}
+			if seen {
+				s.CPUPerCorePercent = out
+			}
+		}
+	}
+
+	// disk I/O: sum read/write throughput across disks
+	if len(diskio) > 0 {
+		var rd, wr float64
+		var has bool
+		for _, d := range diskio {
+			if r := asFloatPtr(d.ReadBytesRatePerSec); r != nil {
+				rd += *r
+				has = true
+			}
+			if w := asFloatPtr(d.WriteBytesRatePerSec); w != nil {
+				wr += *w
+				has = true
+			}
+		}
+		if has {
+			s.DiskReadBytesPerSec = &rd
+			s.DiskWriteBytesPerSec = &wr
+		}
+	}
+
+	// filesystem totals: sum size/used/free across real mounts (skip container/system bind mounts)
+	if len(fs) > 0 {
+		var total, used, free uint64
+		var has bool
+		seenMnt := map[string]bool{}
+		for _, f := range fs {
+			mp, _ := f.MountPoint.(string)
+			if mp == "" {
+				continue
+			}
+			if seenMnt[mp] {
+				continue
+			}
+			seenMnt[mp] = true
+
+			// Skip typical container bind mounts and other pseudo mounts
+			if strings.HasPrefix(mp, "/etc/") || strings.HasPrefix(mp, "/proc") || strings.HasPrefix(mp, "/sys") || strings.HasPrefix(mp, "/dev") {
+				continue
+			}
+
+			sz := asUint64Ptr(f.Size)
+			u := asUint64Ptr(f.Used)
+			fr := asUint64Ptr(f.Free)
+			if sz == nil || *sz == 0 {
+				continue
+			}
+			// Sometimes free isn't present; compute if possible
+			if fr == nil && u != nil {
+				cfr := *sz - *u
+				fr = &cfr
+			}
+			if u == nil && fr != nil {
+				cu := *sz - *fr
+				u = &cu
+			}
+			if u == nil || fr == nil {
+				continue
+			}
+
+			total += *sz
+			used += *u
+			free += *fr
+			has = true
+		}
+		if has && total > 0 {
+			s.FSTotalBytes = &total
+			s.FSUsedBytes = &used
+			s.FSFreeBytes = &free
+			p := (float64(used) / float64(total)) * 100
+			s.FSUsedPercent = &p
+		}
 	}
 
 	c.mu.Lock()

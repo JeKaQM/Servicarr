@@ -51,6 +51,7 @@ type ResourcesUIConfig struct {
 	Memory  bool `json:"memory"`
 	Network bool `json:"network"`
 	Temp    bool `json:"temp"`
+	Storage bool `json:"storage"`
 }
 
 // ServiceStatus tracks service state for change detection
