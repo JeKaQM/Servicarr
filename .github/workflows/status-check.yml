@@ -9,6 +9,8 @@ jobs:
   status:
     name: All Checks Status
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: always()
     needs: []
     steps:
